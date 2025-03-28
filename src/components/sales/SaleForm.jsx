@@ -155,11 +155,11 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     const existingIndex = fields.findIndex(f => f.productoId === productId);
     
     if (existingIndex >= 0) {
-      // Si existe, incrementar cantidad
-      const currentQty = parseInt(productosFields[existingIndex].cantidad) || 0;
-      setValue(`productos.${existingIndex}.cantidad`, currentQty + cantidad);
+      // Si existe, mantener la cantidad existente
+      // No hacemos nada ya que el producto ya está en la lista
+      return;
     } else {
-      // Si no existe, agregar
+      // Si no existe, agregar con la cantidad especificada
       append({ 
         productoId: productId,
         cantidad: cantidad
@@ -171,7 +171,7 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       if (prev.includes(productId)) return prev;
       return [...prev, productId];
     });
-  }, [fields, productosFields, setValue, append, setSelectedProducts]);
+  }, [fields, append, setSelectedProducts]);
 
   const handleRemoveProduct = useCallback((index) => {
     const productId = fields[index].productoId;
