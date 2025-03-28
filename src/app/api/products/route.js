@@ -1,16 +1,34 @@
- import connectToDB from '@/lib/dbConnect';
-import Product from '@/services/models/product';
 import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/dbConnect';
+import Product from '@/services/models/product';
+import Category from '@/services/models/category';
 
 // GET - Obtener todos los productos
-export async function GET() {
+export async function GET(request) {
   try {
-    await connectToDB();
-    const products = await Product.find({}).sort({ createdAt: -1 });
+    await dbConnect();
+    
+    const { searchParams } = new URL(request.url);
+    const categoria = searchParams.get('categoria');
+    
+    let query = {};
+    if (categoria) {
+      if (categoria === 'none') {
+        query.categoria = { $exists: false };
+      } else {
+        query.categoria = categoria;
+      }
+    }
+    
+    const products = await Product.find(query)
+      .sort({ nombre: 1 })
+      .populate('categoria');
+    
     return NextResponse.json(products);
   } catch (error) {
+    console.error('Error fetching products:', error);
     return NextResponse.json(
-      { error: 'Error al obtener productos', message: error.message },
+      { error: 'Error al cargar productos' },
       { status: 500 }
     );
   }
@@ -19,25 +37,22 @@ export async function GET() {
 // POST - Crear un nuevo producto
 export async function POST(request) {
   try {
+    await dbConnect();
     const data = await request.json();
-    await connectToDB();
     
-    const newProduct = new Product({
-      nombre: data.nombre,
-      descripcion: data.descripcion,
-      precioCompra: data.precioCompra,
-      precioVenta: data.precioVenta,
-      cantidadInventario: data.cantidadInventario,
-      categoria: data.categoria,
-      porcentajeGanancia: data.porcentajeGanancia
-    });
+    // Calcular campos adicionales
+    data.precioUnitario = data.precioCompra / (data.cantidadPorPaquete || 1);
+    data.precioVenta = data.precioCompra * (1 + data.porcentajeGanancia / 100);
     
-    await newProduct.save();
-    return NextResponse.json(newProduct, { status: 201 });
+    const product = new Product(data);
+    await product.save();
+    
+    return NextResponse.json(product);
   } catch (error) {
+    console.error('Error creating product:', error);
     return NextResponse.json(
-      { error: 'Error al crear producto', message: error.message },
-      { status: 400 }
+      { error: error.message || 'Error al crear producto' },
+      { status: 500 }
     );
   }
 } 

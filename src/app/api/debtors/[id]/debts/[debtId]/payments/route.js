@@ -5,7 +5,7 @@ import Debtor from '@/services/models/debtor';
 export async function POST(request, { params }) {
   try {
     await dbConnect();
-    const { id, debtId } = params;
+    const { id, debtId } = await params;
     const paymentData = await request.json();
 
     // Validar el monto
@@ -25,7 +25,11 @@ export async function POST(request, { params }) {
     }
 
     // Encontrar la deuda específica
-    const deuda = debtor.deudas.id(debtId);
+    const deuda = debtor.deudas.find(d => {
+      if (!d._id) return false;
+      return d._id.toString ? d._id.toString() === debtId : d._id === debtId;
+    });
+    
     if (!deuda) {
       return NextResponse.json(
         { message: 'Deuda no encontrada' },

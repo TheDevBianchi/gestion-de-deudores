@@ -51,23 +51,19 @@ const DebtorsPageContent = memo(function DebtorsPageContent() {
 
   // Filtrar deudores según criterios
   const filteredDebtors = debtors.filter(debtor => {
-    // Filtro de búsqueda
-    const matchesSearch = 
-      debtor.nombre.toLowerCase().includes(filters.search.toLowerCase()) ||
-      (debtor.telefono && debtor.telefono.includes(filters.search));
+    if (!debtor) return false;
     
-    // Filtro por estado/tab
-    let matchesTab = true;
-    if (selectedTab === 'pendientes') {
-      matchesTab = debtor.deudas?.some(deuda => deuda.estado === 'pendiente');
-    } else if (selectedTab === 'pagados') {
-      // Al menos una deuda y todas están pagadas
-      matchesTab = 
-        debtor.deudas?.length > 0 && 
-        debtor.deudas?.every(deuda => deuda.estado === 'pagada');
-    }
+    // Asegúrate de que cada campo existe antes de usar toLowerCase
+    const nombre = typeof debtor.nombre === 'string' ? debtor.nombre : '';
+    const apellido = typeof debtor.apellido === 'string' ? debtor.apellido : '';
+    const telefono = typeof debtor.telefono === 'string' ? debtor.telefono : '';
     
-    return matchesSearch && matchesTab;
+    // Solo usa toLowerCase si searchTerm es una cadena
+    const searchLower = typeof filters.search === 'string' ? filters.search.toLowerCase() : '';
+    
+    return nombre.toLowerCase().includes(searchLower) || 
+           apellido.toLowerCase().includes(searchLower) || 
+           telefono.includes(filters.search);
   });
 
   return (
@@ -156,13 +152,31 @@ const DebtorsPageContent = memo(function DebtorsPageContent() {
 
 // Componente principal de la página
 function DeudoresPage() {
+  const { debtors = [], fetchDebtors } = useDebtors();
+  const [showDebtorModal, setShowDebtorModal] = useState(false);
+  
+  useEffect(() => {
+    fetchDebtors();
+  }, [fetchDebtors]);
+  
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="container mx-auto py-8 space-y-6"
-    >
-      <h1 className="text-3xl font-bold">Gestión de Deudores</h1>
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Clientes & Deudores</h1>
+        <Button onClick={() => setShowDebtorModal(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Nuevo Cliente
+        </Button>
+      </div>
+      
+      <DebtorFormModal 
+        isOpen={showDebtorModal} 
+        onClose={() => setShowDebtorModal(false)}
+        onSuccess={() => {
+          fetchDebtors();
+          setShowDebtorModal(false);
+        }}
+      />
       
       <Suspense fallback={<div>Cargando estadísticas...</div>}>
         <DebtorStats />
@@ -171,7 +185,7 @@ function DeudoresPage() {
       <Suspense fallback={<div>Cargando contenido...</div>}>
         <DebtorsPageContent />
       </Suspense>
-    </motion.div>
+    </div>
   );
 }
 

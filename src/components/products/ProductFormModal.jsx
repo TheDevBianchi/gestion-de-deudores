@@ -1,38 +1,27 @@
 'use client';
 
-import { lazy, Suspense, memo } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import ProductForm from './ProductForm';
 
-const ProductForm = lazy(() => import('@/components/products/ProductForm'));
-
-const ProductFormModal = memo(function ProductFormModal({ 
-  isOpen, 
-  onClose, 
-  product, 
-  onSuccess 
-}) {
+const ProductFormModal = ({ isOpen, onClose, product, onSuccess }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>
-            {product ? 'Editar Producto' : 'Crear Producto'}
-          </DialogTitle>
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <DialogTitle>{product ? 'Editar Producto' : 'Crear Producto'}</DialogTitle>
         </DialogHeader>
-        <Suspense fallback={<div>Cargando formulario...</div>}>
-          <ProductForm 
-            product={product} 
-            onSuccess={onSuccess} 
+        
+        {/* Contenedor scrolleable */}
+        <div className="px-6 pb-6 overflow-y-auto flex-1">
+          <ProductForm
+            product={product}
+            onSuccess={onSuccess}
+            onClose={onClose}
           />
-        </Suspense>
+        </div>
       </DialogContent>
     </Dialog>
   );
-});
+};
 
 export default ProductFormModal; 

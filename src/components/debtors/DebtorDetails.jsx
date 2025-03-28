@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   PlusCircle,
   Mail,
-  MapPin
+  MapPin,
+  Loader2
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -302,7 +303,7 @@ const DebtItem = memo(function DebtItem({ debt, debtorId, onAddPayment }) {
                 </div>
               )}
               
-              {isPending && (
+              {isPending && !debt._id.toString().startsWith('temp-') && (
                 <div className="mt-4 flex justify-end">
                   <Button 
                     onClick={() => onAddPayment(debt._id, debt.montoPendiente)}
@@ -310,6 +311,18 @@ const DebtItem = memo(function DebtItem({ debt, debtorId, onAddPayment }) {
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Registrar Abono
+                  </Button>
+                </div>
+              )}
+              {isPending && debt._id.toString().startsWith('temp-') && (
+                <div className="mt-4 flex justify-end">
+                  <Button 
+                    disabled
+                    className="bg-gray-400"
+                    title="Espere a que se sincronice la deuda"
+                  >
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sincronizando...
                   </Button>
                 </div>
               )}
@@ -321,14 +334,17 @@ const DebtItem = memo(function DebtItem({ debt, debtorId, onAddPayment }) {
   );
 });
 
-const DebtList = memo(function DebtList({ debts, debtorId, onAddPayment }) {
+const DebtList = memo(function DebtList({ debts = [], debtorId, onAddPayment }) {
+  // Asegurarnos que debts sea siempre un array, incluso si es undefined
+  const safeDebts = Array.isArray(debts) ? debts : [];
+  
   const pendingDebts = useMemo(() => {
-    return debts?.filter(debt => debt.estado === 'pendiente') || [];
-  }, [debts]);
+    return safeDebts.filter(debt => debt?.estado === 'pendiente');
+  }, [safeDebts]);
   
   const paidDebts = useMemo(() => {
-    return debts?.filter(debt => debt.estado === 'pagada') || [];
-  }, [debts]);
+    return safeDebts.filter(debt => debt?.estado === 'pagada');
+  }, [safeDebts]);
   
   if (!debts || debts.length === 0) {
     return (
@@ -348,7 +364,7 @@ const DebtList = memo(function DebtList({ debts, debtorId, onAddPayment }) {
           Pagadas ({paidDebts.length})
         </TabsTrigger>
         <TabsTrigger value="all">
-          Todas ({debts.length})
+          Todas ({safeDebts.length})
         </TabsTrigger>
       </TabsList>
       
@@ -360,7 +376,7 @@ const DebtList = memo(function DebtList({ debts, debtorId, onAddPayment }) {
         ) : (
           pendingDebts.map(debt => (
             <DebtItem 
-              key={debt._id} 
+              key={debt._id || `temp-${Date.now()}`}
               debt={debt} 
               debtorId={debtorId} 
               onAddPayment={onAddPayment} 
@@ -387,7 +403,7 @@ const DebtList = memo(function DebtList({ debts, debtorId, onAddPayment }) {
       </TabsContent>
       
       <TabsContent value="all" className="mt-0">
-        {debts.map(debt => (
+        {safeDebts.map(debt => (
           <DebtItem 
             key={debt._id} 
             debt={debt} 

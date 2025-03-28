@@ -1,80 +1,63 @@
 import mongoose from 'mongoose';
 
+const deudaSchema = new mongoose.Schema({
+  productos: [{
+    producto: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product'
+    },
+    cantidad: Number,
+    precioUnitario: Number,
+    subtotal: Number
+  }],
+  montoTotal: Number,
+  montoPendiente: Number,
+  estado: {
+    type: String,
+    enum: ['pendiente', 'pagada'],
+    default: 'pendiente'
+  },
+  abonos: [{
+    monto: Number,
+    descripcion: String,
+    fecha: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  fecha: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: true });
+
 const debtorSchema = new mongoose.Schema({
   nombre: {
     type: String,
-    required: [true, 'El nombre es requerido'],
+    required: true,
     trim: true
   },
   apellido: {
     type: String,
-    required: [true, 'El apellido es requerido'],
+    required: true,
     trim: true
   },
   telefono: {
     type: String,
-    required: [true, 'El teléfono es requerido']
+    default: '',
+    trim: true
   },
   direccion: {
     type: String,
-    required: [true, 'La dirección es requerida']
+    default: '',
+    trim: true
   },
-  deudas: {
-    type: [{
-      productos: [{
-        producto: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Product',
-          required: true
-        },
-        cantidad: {
-          type: Number,
-          required: true,
-          min: [1, 'La cantidad debe ser mayor a 0']
-        },
-        precioUnitario: {
-          type: Number,
-          required: true
-        },
-        subtotal: {
-          type: Number,
-          required: true
-        }
-      }],
-      montoTotal: {
-        type: Number,
-        required: true,
-        min: [0, 'El monto no puede ser negativo']
-      },
-      montoPendiente: {
-        type: Number,
-        required: true,
-        min: [0, 'El monto pendiente no puede ser negativo']
-      },
-      estado: {
-        type: String,
-        enum: ['pendiente', 'pagada', 'vencida'],
-        default: 'pendiente'
-      },
-      abonos: [{
-        monto: {
-          type: Number,
-          required: true,
-          min: [0, 'El monto del abono no puede ser negativo']
-        },
-        fecha: {
-          type: Date,
-          default: Date.now
-        }
-      }],
-      descripcion: String,
-      createdAt: {
-        type: Date,
-        default: Date.now
-      }
-    }],
-    default: []
+  email: {
+    type: String,
+    default: 'cliente@sistemaventas.com',
+    trim: true
   },
+  deudas: [deudaSchema],
   createdAt: {
     type: Date,
     default: Date.now
@@ -84,7 +67,8 @@ const debtorSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  versionKey: false
 });
 
 // Middleware para actualizar updatedAt antes de cada actualización

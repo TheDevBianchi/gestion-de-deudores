@@ -1,22 +1,16 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/dbConnect';
-import Debtor from '@/models/Debtor';
-import Product from '@/services/models/product';
+import Debtor from '@/services/models/debtor';
 
-export async function GET() {
+export async function GET(request) {
   try {
     await dbConnect();
-    
-    // Aseguramos que el modelo Product esté registrado antes de hacer el populate
-    const debtors = await Debtor.find({})
-      .sort({ createdAt: -1 })
-      .populate('deudas.productos.producto');
-
+    const debtors = await Debtor.find({}).sort({ createdAt: -1 });
     return NextResponse.json(debtors);
   } catch (error) {
-    console.error('Error en GET /api/debtors:', error);
+    console.error('Error fetching debtors:', error);
     return NextResponse.json(
-      { error: 'Error al obtener los deudores' },
+      { error: error.message || 'Error al cargar deudores' },
       { status: 500 }
     );
   }
@@ -26,19 +20,54 @@ export async function POST(request) {
   try {
     await dbConnect();
     const data = await request.json();
+    console.log('Datos recibidos:', data);
     
-    // Asegurarse de que el campo deudas esté presente
-    if (!data.deudas) {
-      data.deudas = [];
+    // Validación y limpieza de datos
+    const nombre = data.nombre?.trim();
+    const apellido = data.apellido?.trim();
+    
+    if (!nombre) {
+      return NextResponse.json(
+        { error: 'El nombre es obligatorio' },
+        { status: 400 }
+      );
     }
     
-    // Crear el deudor
-    const newDebtor = await Debtor.create(data);
+    if (!apellido) {
+      return NextResponse.json(
+        { error: 'El apellido es obligatorio' },
+        { status: 400 }
+      );
+    }
     
-    // Devolver el objeto completo
-    return NextResponse.json(newDebtor);
+    // Crear el objeto con los datos del deudor
+    const debtorData = {
+      nombre,
+      apellido,
+      telefono: data.telefono?.trim() || '',
+      direccion: data.direccion?.trim() || '',
+      email: data.email?.trim() || 'cliente@sistemaventas.com',
+      deudas: []
+    };
+
+    console.log('Datos del deudor:', debtorData);
+    
+    // Crear y guardar el deudor
+    const debtor = new Debtor(debtorData);
+    const savedDebtor = await debtor.save();
+    
+    // Verificar que se guardó correctamente
+    if (!savedDebtor._id) {
+      throw new Error('Error al guardar el deudor');
+    }
+    
+    // Log para debugging
+    console.log('Deudor guardado en la base de datos:', savedDebtor);
+    
+    return NextResponse.json(savedDebtor);
+    
   } catch (error) {
-    console.error('Error creando deudor:', error);
+    console.error('Error al crear deudor:', error);
     return NextResponse.json(
       { error: error.message || 'Error al crear deudor' },
       { status: 500 }

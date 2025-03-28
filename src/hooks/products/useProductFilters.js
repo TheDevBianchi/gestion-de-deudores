@@ -18,10 +18,18 @@ export const useProductFilters = (products, filters) => {
     }
     
     // Filtro por categoría
-    if (filters.categoria && filters.categoria !== 'todas') {
-      filtered = filtered.filter(product => 
-        product.categoria === filters.categoria
-      );
+    if (filters.categoria) {
+      if (filters.categoria === 'none') {
+        // Productos sin categoría
+        filtered = filtered.filter(product => 
+          !product.categoria || product.categoria === ''
+        );
+      } else if (filters.categoria !== 'todas') {
+        // Categoría específica
+        filtered = filtered.filter(product => 
+          product.categoria === filters.categoria
+        );
+      }
     }
     
     // Filtro por disponibilidad

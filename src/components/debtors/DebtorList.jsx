@@ -31,11 +31,18 @@ import {
   Eye,
   Plus,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  UserPlus,
+  ArrowUpDown,
+  ChevronDown,
+  MoreHorizontal
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import NewDebtModal from '@/components/debtors/NewDebtModal'; 
+import { Input } from '@/components/ui/input';
+import { useDebtors } from '@/hooks/debtors/useDebtors';
+import NewDebtModal from './NewDebtModal';
 
 const DebtorRow = memo(function DebtorRow({ debtor, onEdit, onDelete, onAddDebt }) {
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
@@ -174,7 +181,7 @@ const DebtorRow = memo(function DebtorRow({ debtor, onEdit, onDelete, onAddDebt 
   );
 });
 
-const DebtorList = memo(function DebtorList({ debtors, onEditDebtor, deleteDebtorById }) {
+const DebtorList = memo(function DebtorList({ debtors = [], onEditDebtor, deleteDebtorById }) {
   return (
     <Card className="overflow-hidden border rounded-lg">
       <div className="overflow-x-auto">
@@ -189,16 +196,16 @@ const DebtorList = memo(function DebtorList({ debtors, onEditDebtor, deleteDebto
             </TableRow>
           </TableHeader>
           <TableBody>
-            {debtors.length === 0 ? (
+            {!debtors || debtors.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
-                  No se encontraron deudores
+                <TableCell colSpan={6} className="text-center">
+                  No hay deudores registrados
                 </TableCell>
               </TableRow>
             ) : (
               debtors.map((debtor) => (
                 <DebtorRow 
-                  key={debtor._id} 
+                  key={debtor._id || `temp-${Date.now()}`}
                   debtor={debtor} 
                   onEdit={onEditDebtor}
                   onDelete={deleteDebtorById}

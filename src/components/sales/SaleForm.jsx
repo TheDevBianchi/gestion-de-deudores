@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,9 +20,11 @@ import { toast } from 'sonner';
 import { useProducts } from '@/hooks/products/useProducts';
 import { useDebtors } from '@/hooks/debtors/useDebtors';
 import { useSales } from '@/hooks/sales/useSales';
+import { useSaleStore } from '@/hooks/sales/useSaleStore';
 import { Trash2, Plus, UserPlus } from 'lucide-react';
 import DebtorFormModal from '../debtors/DebtorFormModal';
 import ProductSearchSelector from './ProductSearchSelector';
+import { useDollarPrice } from '@/hooks/dollar/useDollarPrice';
 
 // Schema base para validar el formulario
 const createSaleSchema = (esCredito) => {
@@ -41,18 +43,78 @@ const createSaleSchema = (esCredito) => {
 };
 
 // Componente para cada producto en la lista
-function ProductListItem({ product, index, register, onRemove, disabled, errors, watch }) {
+function ProductListItem({ product, index, register, onRemove, disabled, errors, watch, setValue, form, dollarPrice = 0 }) {
   const cantidad = parseInt(watch(`productos.${index}.cantidad`)) || 0;
-  const precioUnitario = product ? (product.precioCompra * (1 + product.porcentajeGanancia / 100)) : 0;
-  const subtotal = precioUnitario * cantidad;
+  const updateItem = useSaleStore(state => state.updateItem);
+  const recalculateTotal = useSaleStore(state => state.recalculateTotal);
   
+  // Establecer tipoVenta fijo como 'unidad'
+  const tipoVenta = 'unidad';
+  
+  // Calcular precios base
+  const precioCompraPaquete = product?.precioCompra || 0;
+  const porcentajeGanancia = product?.porcentajeGanancia || 0;
+  const cantidadPorPaquete = product?.cantidadPorPaquete || 1;
+  
+  // Calcular precio de venta por paquete y por unidad
+  const precioVentaPaquete = precioCompraPaquete * (1 + porcentajeGanancia / 100);
+  const precioVentaUnitario = (precioVentaPaquete / cantidadPorPaquete);
+  
+  // Calcular subtotal basado en el precio unitario
+  const precioUnitarioSegunTipo = precioVentaUnitario;
+  const subtotal = (precioUnitarioSegunTipo * cantidad).toFixed(2);
+  const subtotalBsF = (parseFloat(subtotal) * dollarPrice).toFixed(2);
+  
+  // DEFINIR stockUnidades
+  const cantidadPaquetes = product?.cantidadPaquetes || 0;
+  const cantidadUnidadesSueltas = product?.cantidadUnidadesSueltas || 0;
+  const stockUnidades = (cantidadPaquetes * cantidadPorPaquete) + cantidadUnidadesSueltas;
+  const stockDisponible = stockUnidades;
+  const exceedsStock = cantidad > stockDisponible;
+  
+  // Actualizar valores en el formulario y en Zustand cuando cambia cualquier dependencia relevante
+  useEffect(() => {
+    if (!form) return;
+    
+    // Para debug
+    console.log(`Actualizando formulario para producto ${index}, tipoVenta=${tipoVenta}`);
+    
+    form.setValue(`productos.${index}.tipoVenta`, tipoVenta);
+    form.setValue(`productos.${index}.precioUnitario`, precioUnitarioSegunTipo);
+    form.setValue(`productos.${index}.subtotal`, parseFloat(subtotal));
+    
+    // Actualizar el store de Zustand
+    updateItem(index, {
+      productoId: product._id,
+      cantidad,
+      tipoVenta,
+      precioUnitario: precioUnitarioSegunTipo,
+      subtotal: parseFloat(subtotal)
+    }, product);
+    
+    // Forzar recálculo inmediato
+    recalculateTotal();
+    
+  }, [cantidad, index, form, precioUnitarioSegunTipo, subtotal, product, updateItem, recalculateTotal]);
+
   return (
-    <div key={index} className="flex items-center gap-4 p-3 rounded-md border bg-card">
+    <div key={index} className={`flex items-center gap-4 p-3 rounded-md border ${exceedsStock ? 'border-red-500 bg-red-50' : 'bg-card'}`}>
       <div className="flex-1">
         <p className="font-medium">{product?.nombre || 'Producto'}</p>
         <p className="text-sm text-muted-foreground">
-          Stock: {product?.cantidadInventario || 0} unidades
+          Stock: {stockUnidades} unidades
         </p>
+        {cantidadPorPaquete > 1 && (
+          <p className="text-xs text-muted-foreground">
+            {cantidadPorPaquete} unidades por paquete
+          </p>
+        )}
+        
+        {exceedsStock && (
+          <p className="text-xs text-red-500 font-medium mt-1">
+            ¡Stock insuficiente!
+          </p>
+        )}
       </div>
       
       <div className="w-24">
@@ -61,19 +123,20 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors,
           id={`cantidad-${index}`}
           type="number"
           min="1"
-          max={product?.cantidadInventario || 999}
+          max={stockDisponible}
           {...register(`productos.${index}.cantidad`, {
             valueAsNumber: true,
-            onChange: (e) => {
-              // Puede añadir un trigger para recalcular el total si es necesario
-              // trigger();
+            min: {
+              value: 1,
+              message: 'Mínimo 1'
             },
             max: {
-              value: product?.cantidadInventario || 999,
-              message: `Máximo ${product?.cantidadInventario} unidades`
+              value: stockDisponible,
+              message: `Máximo ${stockDisponible} unidades`
             }
           })}
           disabled={disabled}
+          className={exceedsStock ? 'border-red-500' : ''}
         />
         {errors?.productos?.[index]?.cantidad && (
           <p className="text-xs text-red-500 mt-1">
@@ -82,12 +145,25 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors,
         )}
       </div>
       
-      <div className="w-24 text-right">
+      <div className="w-28">
+        <Label>Tipo de venta</Label>
+        <div className="mt-2 text-sm text-muted-foreground">
+          Solo unidades
+        </div>
+      </div>
+      
+      <div className="w-32 text-right">
         <Label>Precio</Label>
         <div className="mt-2 font-semibold">
-          ${subtotal.toFixed(2)}
+          ${subtotal}
           <div className="text-xs text-muted-foreground">
-            {cantidad} x ${precioUnitario.toFixed(2)}
+            Bs. {subtotalBsF}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {`${cantidad} unidad(es)`}
+          </div>
+          <div className="text-xs text-blue-600 font-medium">
+            ${precioVentaUnitario.toFixed(2)}/unidad
           </div>
         </div>
       </div>
@@ -106,14 +182,32 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors,
   );
 }
 
-const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
+function SaleForm({ onSuccess, onCreditSale }) {
   const { products } = useProducts();
   const { debtors = [], fetchDebtors, addDebtor } = useDebtors();
   const { createSale } = useSales();
+  const { price: dollarPrice } = useDollarPrice();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDebtorModal, setShowDebtorModal] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [esCredito, setEsCredito] = useState(false);
+  
+  // Zustand state
+  const { 
+    total, 
+    totalBsF, 
+    clearItems, 
+    removeItem, 
+    updateItem, 
+    syncWithForm,
+    recalculateTotal,
+    setDollarPrice: setStoreDollarPrice 
+  } = useSaleStore();
+
+  // Actualizar precio del dólar en el store
+  useEffect(() => {
+    setStoreDollarPrice(dollarPrice);
+  }, [dollarPrice, setStoreDollarPrice]);
 
   // Cargar deudores al montar el componente
   useEffect(() => {
@@ -129,7 +223,11 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     watch,
     setValue,
     formState: { errors },
-    trigger
+    trigger,
+    getValues,
+    setError,
+    clearErrors,
+    form
   } = useForm({
     resolver: zodResolver(createSaleSchema(esCredito)),
     defaultValues: {
@@ -138,6 +236,15 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       esCredito: false
     }
   });
+
+  // Sincronizar el formulario con Zustand cuando cambia
+  useEffect(() => {
+    const subscription = watch((value) => {
+      syncWithForm(value, products);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [watch, syncWithForm, products]);
 
   // Actualizar el resolver cuando cambia esCredito
   useEffect(() => {
@@ -161,7 +268,7 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
   });
 
   // Funciones para manejar productos
-  const handleAddProduct = useCallback((productId, cantidad) => {
+  function handleAddProduct(productId, cantidad) {
     // Verificar si el producto ya existe
     const existingIndex = fields.findIndex(f => f.productoId === productId);
     
@@ -173,7 +280,8 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       // Si no existe, agregar con la cantidad especificada o 1 por defecto
       append({ 
         productoId: productId,
-        cantidad: cantidad || 1
+        cantidad: cantidad || 1,
+        tipoVenta: 'unidad'  // Tipo de venta fijo como unidad
       });
     }
     
@@ -182,34 +290,40 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       if (prev.includes(productId)) return prev;
       return [...prev, productId];
     });
-  }, [fields, watch, setValue, append, setSelectedProducts]);
+  }
 
-  const handleRemoveProduct = useCallback((index) => {
+  function handleRemoveProduct(index) {
     const productId = fields[index].productoId;
     remove(index);
+    removeItem(index);
     
     // Actualizar la lista de productos seleccionados
     setSelectedProducts(prev => prev.filter(id => id !== productId));
-  }, [fields, remove, setSelectedProducts]);
-
-  // Calcular total correctamente basado en la cantidad actual
-  const total = useMemo(() => {
-    return fields.reduce((sum, field, index) => {
-      const product = products.find(p => p._id === field.productoId);
-      // Obtener la cantidad actual del campo, asegurándose que sea un número
-      const cantidad = parseInt(watch(`productos.${index}.cantidad`)) || 0;
-      
-      if (!product) return sum;
-      
-      const precio = product.precioCompra * (1 + product.porcentajeGanancia / 100);
-      return sum + (precio * cantidad);
-    }, 0);
-  }, [fields, products, watch]);
+  }
 
   // Manejar envío del formulario
   const onSubmit = async (data) => {
     try {
       setIsSubmitting(true);
+      
+      // Calcular unidades a descontar del inventario
+      const productsToUpdate = data.productos.map(item => {
+        const product = products.find(p => p._id === item.productoId);
+        const tipoVenta = item.tipoVenta || 'unidad';
+        const cantidadPorPaquete = product?.cantidadPorPaquete || 1;
+        
+        return {
+          ...item,
+          tipoVenta,
+          cantidadPorPaquete
+        };
+      });
+      
+      // Reemplazar productos con la información actualizada
+      const dataNormalizada = {
+        ...data,
+        productos: productsToUpdate
+      };
       
       // Para ventas a crédito
       if (data.esCredito) {
@@ -221,20 +335,24 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
           }
           
           // Crear venta a crédito directamente, sin abrir el modal de deuda
-          const ventaResponse = await createSale(data);
+          const ventaResponse = await createSale(dataNormalizada);
           toast.success('Venta a crédito registrada exitosamente');
           
-          // Opcional: Puedes notificar del éxito
-          onSuccess?.();
+          // Limpiar estado
+          clearItems();
           reset();
           setSelectedProducts([]);
+          onSuccess?.();
           return;
         }
       }
       
       // Proceder con venta normal
-      await createSale(data);
+      await createSale(dataNormalizada);
       toast.success('Venta registrada exitosamente');
+      
+      // Limpiar estado
+      clearItems();
       reset();
       setSelectedProducts([]);
       onSuccess?.();
@@ -246,8 +364,8 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     }
   };
 
-  // Manejar creación de deudor - solución alternativa
-  const handleDebtorCreated = useCallback((newDebtor) => {
+  // Manejar creación de deudor
+  function handleDebtorCreated(newDebtor) {
     if (!newDebtor) {
       console.error('Error: No se recibió información del deudor');
       toast.error('Error al procesar información del nuevo deudor');
@@ -275,7 +393,19 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     
     // Notificar éxito
     toast.success(`Deudor ${newDebtor.nombre} ${newDebtor.apellido} creado exitosamente`);
-  }, [setValue, fetchDebtors, addDebtor]);
+  }
+
+  // Asegurarnos de que el total se actualice cuando cambian los productos
+  useEffect(() => {
+    if (productosFields && productosFields.length > 0) {
+      // Forzar recálculo del total cuando cambian los productos
+      recalculateTotal();
+    }
+  }, [productosFields, recalculateTotal]);
+
+  // Formatear correctamente los valores de total para la interfaz
+  const formattedTotal = typeof total === 'string' ? total : total.toFixed(2);
+  const formattedTotalBsF = typeof totalBsF === 'string' ? totalBsF : totalBsF.toFixed(2);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -317,19 +447,16 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
                     product={product}
                     index={index}
                     register={register}
+                    setValue={setValue}
+                    form={form}
                     onRemove={() => handleRemoveProduct(index)}
                     disabled={isSubmitting}
                     errors={errors}
                     watch={watch}
+                    dollarPrice={dollarPrice || 0}
                   />
                 );
               })}
-            </div>
-            
-            {/* Mostrar el total acumulado debajo de la lista de productos */}
-            <div className="mt-4 text-right">
-              <span className="text-sm text-muted-foreground mr-2">Subtotal:</span>
-              <span className="font-bold">${total.toFixed(2)}</span>
             </div>
           </div>
         )}
@@ -397,7 +524,7 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
                                     </SelectItem>
                                   ))
                                 ) : (
-                                  <SelectItem value="none" disabled>
+                                  <SelectItem value="no_clients" disabled>
                                     No hay clientes disponibles
                                   </SelectItem>
                                 )}
@@ -429,7 +556,10 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-sm text-muted-foreground">Total a pagar</div>
-                    <div className="text-2xl font-bold">${total.toFixed(2)}</div>
+                    <div className="text-2xl font-bold">${formattedTotal}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Bs. {formattedTotalBsF}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-muted-foreground">Tipo de venta</div>
@@ -466,7 +596,7 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
           {isSubmitting ? (
             <>Procesando venta...</>
           ) : (
-            <>Completar Venta por ${total.toFixed(2)}</>
+            <>Completar Venta (${formattedTotal} / Bs. {formattedTotalBsF})</>
           )}
         </Button>
         
@@ -491,6 +621,6 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       />
     </form>
   );
-});
+}
 
 export default SaleForm; 

@@ -13,6 +13,7 @@ import DebtorDetails from '@/components/debtors/DebtorDetails';
 import DebtorFormModal from '@/components/debtors/DebtorFormModal';
 import NewDebtModal from '@/components/debtors/NewDebtModal';
 import PaymentForm from '@/components/debtors/PaymentForm';
+import DebtorList from '@/components/debtors/DebtorList';
 
 // Componente principal
 const DebtorDetailsPage = () => {
@@ -56,7 +57,9 @@ const DebtorDetailsPage = () => {
   
   const handleDebtSuccess = () => {
     setShowDebtModal(false);
-    fetchDebtorById(id);
+    if (id) {
+      fetchDebtorById(id);
+    }
     toast.success('Deuda registrada correctamente');
   };
   
@@ -176,7 +179,10 @@ const DebtorDetailsPage = () => {
       
       <Suspense fallback={<div>Cargando detalles...</div>}>
         <DebtorDetails 
-          debtor={selectedDebtor} 
+          debtor={{
+            ...selectedDebtor,
+            deudas: Array.isArray(selectedDebtor?.deudas) ? selectedDebtor.deudas : []
+          }}
           onAddPayment={handleAddPayment} 
           onAddDebt={handleAddDebt}
         />

@@ -1,7 +1,8 @@
 'use client';
 
-import { memo } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
+import { useProducts } from '@/hooks/products/useProducts';
+import { useCategories } from '@/hooks/categories/useCategories';
 import {
   Table,
   TableBody,
@@ -10,149 +11,215 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/custom-select';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Edit, Trash2 } from 'lucide-react';
+import { PlusIcon, PencilIcon, TrashIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { useState } from 'react';
+import ProductFormModal from './ProductFormModal';
+import { Badge } from '@/components/ui/badge';
 
-const ProductRow = memo(function ProductRow({ 
-  product, 
-  onEditProduct, 
-  onDeleteProduct, 
-  dollarPrice 
-}) {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+const ProductList = memo(function ProductList() {
+  const { products, isLoading, error, fetchProducts, deleteProduct } = useProducts();
+  const { categories, isLoading: categoriesLoading, fetchCategories } = useCategories();
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   
-  const handleDelete = async () => {
-    try {
-      await onDeleteProduct(product._id);
-      toast.success(`Producto "${product.nombre}" eliminado correctamente`);
-    } catch (error) {
-      toast.error(`Error al eliminar el producto: ${error.message}`);
+  // Tasa de cambio (ajustar según necesidades)
+  const [tasaCambio, setTasaCambio] = useState(35.5);
+  
+  // Cargar productos y categorías al montar
+  useEffect(() => {
+    fetchProducts();
+    fetchCategories();
+  }, [fetchProducts, fetchCategories]);
+  
+  // Filtrar productos
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      // Filtro por texto de búsqueda
+      const matchesSearch = product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      // Filtro por categoría
+      let matchesCategory = categoryFilter === 'all';
+      if (categoryFilter === 'none') {
+        // Productos sin categoría
+        matchesCategory = !product.categoria || product.categoria === '';
+      } else if (categoryFilter !== 'all') {
+        // Categoría específica
+        matchesCategory = product.categoria === categoryFilter;
+      }
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchTerm, categoryFilter]);
+  
+  // Obtener nombre de categoría
+  const getCategoryName = useCallback((categoryId) => {
+    if (!categoryId) return 'Sin categoría';
+    
+    // Buscar la categoría por ID
+    const category = categories.find(cat => cat._id === categoryId);
+    
+    // Verificar si se encontró la categoría
+    if (category) {
+      return category.nombre;
+    }
+    
+    // Si llegamos aquí, la categoría existe pero no se encontró en nuestra lista
+    return 'Categoría desconocida';
+  }, [categories]);
+  
+  // Funciones para manejar productos
+  const handleEditProduct = (product) => {
+    setSelectedProduct(product);
+    setShowProductModal(true);
+  };
+  
+  const handleDeleteProduct = async (productId) => {
+    if (confirm('¿Está seguro de eliminar este producto?')) {
+      try {
+        await deleteProduct(productId);
+        toast.success('Producto eliminado correctamente');
+      } catch (error) {
+        toast.error(error.message || 'Error al eliminar producto');
+      }
     }
   };
   
-  // Calcular precio en dólares
-  const precioUSD = (product.precioCompra / dollarPrice).toFixed(2);
+  const handleProductSaved = () => {
+    fetchProducts();
+    setShowProductModal(false);
+    setSelectedProduct(null);
+  };
+  
+  // Calcular precio en bolívares
+  const calcularPrecioBsF = (precioUSD) => {
+    return (parseFloat(precioUSD) * tasaCambio).toFixed(2);
+  };
   
   return (
-    <>
-      <TableRow className="hover:bg-muted/50">
-        <TableCell className="font-medium">{product.nombre}</TableCell>
-        <TableCell>
-          ${product.precioCompra.toFixed(2)} <br/>
-          <span className="text-xs text-muted-foreground">(${precioUSD} USD)</span>
-        </TableCell>
-        <TableCell>{product.cantidadInventario}</TableCell>
-        <TableCell>
-          <Badge
-            variant={product.cantidadInventario > 0 ? "success" : "destructive"}
-          >
-            {product.cantidadInventario > 0 ? "Disponible" : "Agotado"}
-          </Badge>
-        </TableCell>
-        <TableCell className="text-right space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => onEditProduct(product)}
-          >
-            <Edit className="h-4 w-4 mr-1" /> Editar
-          </Button>
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-1" /> Eliminar
-          </Button>
-        </TableCell>
-      </TableRow>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Productos</h2>
+        <Button 
+          onClick={() => {
+            setSelectedProduct(null);
+            setShowProductModal(true);
+          }}
+        >
+          <PlusIcon className="mr-2 h-4 w-4" />
+          Nuevo Producto
+        </Button>
+      </div>
       
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción eliminará permanentemente el producto "{product.nombre}".
-              Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-});
-
-const ProductList = memo(function ProductList({ 
-  products, 
-  onEditProduct, 
-  deleteProductById, 
-  dollarPrice 
-}) {
-  if (!products || products.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center p-6">
-          <p className="text-muted-foreground text-center">
-            No se encontraron productos. Intenta cambiar los filtros o añade nuevos productos.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-    >
-      <Card>
-        <CardContent className="p-0">
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="w-full md:w-2/3">
+          <Input
+            placeholder="Buscar productos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="w-full md:w-1/3">
+          <Select
+            value={categoryFilter}
+            onValueChange={setCategoryFilter}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Filtrar por categoría" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las categorías</SelectItem>
+              <SelectItem value="none">Sin categoría</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category._id} value={category._id}>
+                  {category.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      
+      {isLoading ? (
+        <p>Cargando productos...</p>
+      ) : error ? (
+        <p className="text-red-500">Error: {error}</p>
+      ) : filteredProducts.length === 0 ? (
+        <p>No hay productos que coincidan con los filtros.</p>
+      ) : (
+        <div className="border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Precio Compra</TableHead>
+                <TableHead className="text-right">Precio Venta</TableHead>
+                <TableHead className="text-right">Precio en Bs.</TableHead>
+                <TableHead className="text-right">Inventario</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product) => (
-                <ProductRow
-                  key={product._id}
-                  product={product}
-                  onEditProduct={onEditProduct}
-                  onDeleteProduct={deleteProductById}
-                  dollarPrice={dollarPrice}
-                />
+              {filteredProducts.map((product) => (
+                <TableRow key={product._id}>
+                  <TableCell className="font-medium">{product.nombre}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="whitespace-nowrap">
+                      {getCategoryName(product.categoria)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">${product.precioCompra.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    ${(product.precioCompra * (1 + product.porcentajeGanancia / 100)).toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    Bs. {calcularPrecioBsF(product.precioCompra * (1 + product.porcentajeGanancia / 100))}
+                  </TableCell>
+                  <TableCell className="text-right">{product.cantidadInventario}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditProduct(product)}
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteProduct(product._id)}
+                      >
+                        <TrashIcon className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </motion.div>
+        </div>
+      )}
+      
+      <ProductFormModal
+        isOpen={showProductModal}
+        onClose={() => setShowProductModal(false)}
+        product={selectedProduct}
+        onSuccess={handleProductSaved}
+      />
+    </div>
   );
 });
 

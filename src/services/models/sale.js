@@ -11,6 +11,17 @@ const productoVentaSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  tipoVenta: {
+    type: String,
+    enum: ['unidad', 'paquete'],
+    default: 'unidad',
+    required: true
+  },
+  cantidadPorPaquete: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
   precioUnitario: {
     type: Number,
     required: true

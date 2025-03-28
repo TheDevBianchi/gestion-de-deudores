@@ -29,12 +29,12 @@ import { Loader2 } from 'lucide-react';
 
 // Esquema de validación
 const debtorSchema = z.object({
-  nombre: z.string().min(2, 'El nombre es obligatorio'),
-  apellido: z.string().min(2, 'El apellido es obligatorio'),
-  telefono: z.string().min(5, 'El teléfono es obligatorio'),
-  direccion: z.string().min(5, 'La dirección es obligatoria'),
-  email: z.string().email('Email inválido').optional().or(z.literal('')),
-  descripcion: z.string().optional().or(z.literal(''))
+  nombre: z.string().min(1, 'El nombre es requerido'),
+  apellido: z.string().min(1, 'El apellido es requerido'),
+  telefono: z.string().optional(),
+  direccion: z.string().optional(),
+  email: z.string().email('Email inválido').optional(),
+  deudas: z.array(z.any()).optional()
 });
 
 const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor, onSuccess }) {
@@ -80,33 +80,39 @@ const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor,
   const onSubmit = async (data) => {
     try {
       setIsSubmitting(true);
-      let response;
       
-      if (!data.deudas) {
-        data.deudas = [];
+      // Validar datos antes de enviar
+      if (!data.nombre?.trim()) {
+        throw new Error('El nombre es requerido');
       }
       
-      if (debtor) {
-        response = await updateDebtorById(debtor._id, data);
-        toast.success('Deudor actualizado correctamente');
+      const dataToSubmit = {
+        nombre: data.nombre.trim(),
+        apellido: data.apellido?.trim() || '',
+        telefono: data.telefono?.trim() || '',
+        direccion: data.direccion?.trim() || '',
+        email: data.email?.trim() || 'cliente@sistemaventas.com',
+        deudas: [] // Inicializar array de deudas
+      };
+      
+      let result;
+      if (debtor?._id) {
+        result = await updateDebtorById(debtor._id, dataToSubmit);
       } else {
-        response = await createDebtor(data);
-        
-        // Forzar actualización de la lista de deudores
-        await fetchDebtors();
-        
-        toast.success('Deudor creado correctamente');
+        result = await createDebtor(dataToSubmit);
       }
       
-      if (response && response._id) {
-        onSuccess?.(response);
-      } else {
-        console.error('Respuesta inválida:', response);
-        toast.error('Error: La respuesta no contiene un ID de deudor válido');
+      if (!result?._id) {
+        throw new Error('Error al procesar el deudor: respuesta inválida del servidor');
       }
+      
+      onSuccess?.(result);
+      onClose();
+      form.reset();
+      
     } catch (error) {
-      console.error('Error en formulario de deudor:', error);
-      toast.error(error.message || 'Error al procesar el formulario');
+      console.error('Error al procesar deudor:', error);
+      toast.error(error.message || 'Error al procesar el deudor');
     } finally {
       setIsSubmitting(false);
     }
@@ -174,7 +180,7 @@ const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor,
               name="telefono"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Teléfono</FormLabel>
+                  <FormLabel>Teléfono (opcional)</FormLabel>
                   <FormControl>
                     <Input 
                       placeholder="Teléfono" 
@@ -193,7 +199,7 @@ const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor,
               name="direccion"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Dirección</FormLabel>
+                  <FormLabel>Dirección (opcional)</FormLabel>
                   <FormControl>
                     <Input 
                       placeholder="Dirección" 

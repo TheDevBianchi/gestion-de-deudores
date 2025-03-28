@@ -10,7 +10,7 @@ import {
   ShoppingCart,
   Package,
   Users,
-  BarChart2,
+  Album,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -45,9 +45,10 @@ export function SidebarNav() {
   const navItems = useMemo(() => [
     { href: "/", title: "Inicio Y Reportes", icon: Home },
     { href: "/sales", title: "Ventas", icon: ShoppingCart },
-    { href: "/productos", title: "Inventario", icon: Package },
     { href: "/deudores", title: "Deudores", icon: Users },
-    { href: "/configuracion", title: "Configuración", icon: Settings }
+    { href: "/productos", title: "Inventario", icon: Package },
+    { href: "/productos/categorias", title: 'Categorias', icon: Album},
+    { href: "/configuracion", title: "Configuración", icon: Settings },
   ], []);
   
   // Modo colapsado y expandido

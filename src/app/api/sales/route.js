@@ -22,98 +22,157 @@ export async function GET() {
   }
 }
 
-export async function POST(request) {
+export async function POST(req) {
   try {
     await dbConnect();
-    const data = await request.json();
     
-    // Procesar productos y validar stock
-    const saleProducts = [];
-    let montoTotal = 0;
+    const body = await req.json();
     
-    // Si es venta a crédito, validar que el cliente exista
-    let clienteNombre = 'Comprador';
-    if (data.esCredito && data.clienteId !== 'default') {
-      const debtor = await Debtor.findById(data.clienteId);
-      if (!debtor) {
-        return NextResponse.json(
-          { error: 'Cliente no encontrado' },
-          { status: 404 }
-        );
-      }
-      clienteNombre = `${debtor.nombre} ${debtor.apellido}`;
-    }
-
-    // Validar y actualizar inventario
-    for (const item of data.productos) {
-      const product = await Product.findById(item.productoId);
+    // Cargar todos los productos de una vez para evitar múltiples consultas
+    const productIds = body.productos.map(item => item.productoId);
+    const productos = await Product.find({ _id: { $in: productIds } });
+    
+    // Crear un mapa para acceso rápido
+    const productosMap = {};
+    productos.forEach(producto => {
+      productosMap[producto._id.toString()] = producto;
+    });
+    
+    // Verificar productos disponibles
+    for (const item of body.productos) {
+      const producto = productosMap[item.productoId];
       
-      if (!product) {
+      if (!producto) {
         return NextResponse.json(
           { error: `Producto no encontrado: ${item.productoId}` },
           { status: 404 }
         );
       }
       
-      if (product.cantidadInventario < item.cantidad) {
-        return NextResponse.json(
-          { error: `Stock insuficiente para ${product.nombre}` },
-          { status: 400 }
-        );
+      // Verificar stock según tipo de venta
+      const tipoVenta = item.tipoVenta || 'unidad';
+      const cantidadPorPaquete = producto.cantidadPorPaquete || 1;
+      
+      if (tipoVenta === 'paquete') {
+        // Verificar si hay suficientes paquetes
+        if (producto.cantidadPaquetes < item.cantidad) {
+          return NextResponse.json(
+            { error: `Stock insuficiente para ${producto.nombre}. Disponible: ${producto.cantidadPaquetes} paquetes, Solicitado: ${item.cantidad} paquetes` },
+            { status: 400 }
+          );
+        }
+      } else {
+        // Verificar si hay suficientes unidades (paquetes + sueltas)
+        const totalUnidades = (producto.cantidadPaquetes * cantidadPorPaquete) + producto.cantidadUnidadesSueltas;
+        if (totalUnidades < item.cantidad) {
+          return NextResponse.json(
+            { error: `Stock insuficiente para ${producto.nombre}. Disponible: ${totalUnidades} unidades, Solicitado: ${item.cantidad} unidades` },
+            { status: 400 }
+          );
+        }
       }
-
-      const precioUnitario = product.precioCompra * (1 + product.porcentajeGanancia / 100);
-      const subtotal = precioUnitario * item.cantidad;
-
-      // Agregar a la lista de productos de venta
-      saleProducts.push({
+    }
+    
+    // Preparar productos para la venta
+    const productosVenta = body.productos.map(item => {
+      const producto = productosMap[item.productoId];
+      // Obtener tipoVenta del formulario
+      const tipoVenta = item.tipoVenta || 'unidad';
+      const cantidadPorPaquete = producto.cantidadPorPaquete || 1;
+      
+      // Calcular precios
+      const precioVentaPaquete = producto.precioCompra * (1 + producto.porcentajeGanancia / 100);
+      const precioVentaUnitario = precioVentaPaquete / cantidadPorPaquete;
+      
+      // Precio según tipo de venta
+      const precioUnitario = tipoVenta === 'paquete' ? precioVentaPaquete : precioVentaUnitario;
+      
+      return {
         producto: item.productoId,
         cantidad: item.cantidad,
+        tipoVenta: tipoVenta,
+        cantidadPorPaquete,
         precioUnitario,
-        subtotal
-      });
-
-      montoTotal += subtotal;
-
-      // Actualizar inventario
-      product.cantidadInventario -= item.cantidad;
-      await product.save();
-    }
-
-    // Crear la venta
-    const sale = await Sale.create({
-      productos: saleProducts,
-      montoTotal,
-      clienteId: data.clienteId || 'default',
-      clienteNombre,
-      esCredito: data.esCredito,
-      estado: data.esCredito ? 'pendiente' : 'completada',
-      fecha: new Date()
+        subtotal: precioUnitario * item.cantidad
+      };
     });
-
-    // Si es venta a crédito, agregar deuda automáticamente al cliente
-    if (data.esCredito && data.clienteId !== 'default') {
-      const debtor = await Debtor.findById(data.clienteId);
-      
-      // Agregar deuda con los productos ya seleccionados
-      debtor.deudas.push({
-        productos: saleProducts,
-        montoTotal,
-        montoPendiente: montoTotal,
-        estado: 'pendiente',
-        fechaCreacion: new Date()
-      });
-      
-      await debtor.save();
-    }
-
-    // Retornar venta con productos populados
-    await sale.populate('productos.producto');
-    return NextResponse.json(sale);
     
+    // Calcular el monto total
+    const montoTotal = productosVenta.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    // Crear venta
+    const venta = new Sale({
+      productos: productosVenta,
+      cliente: body.clienteId || null,
+      esCredito: body.esCredito || false,
+      montoTotal
+    });
+    
+    // Guardar venta
+    await venta.save();
+    
+    // Actualizar inventario
+    for (const item of body.productos) {
+      const producto = productosMap[item.productoId];
+      const tipoVenta = item.tipoVenta || 'unidad';
+      const cantidadPorPaquete = producto.cantidadPorPaquete || 1;
+      
+      if (tipoVenta === 'paquete') {
+        // Si se venden paquetes completos, simplemente restar de cantidadPaquetes
+        await Product.findByIdAndUpdate(
+          item.productoId,
+          { $inc: { cantidadPaquetes: -item.cantidad } }
+        );
+      } else {
+        // Si se venden unidades, la lógica es más compleja
+        // Primero intentamos descontar de unidades sueltas
+        const unidadesSueltasDisponibles = producto.cantidadUnidadesSueltas || 0;
+        const cantidadSolicitada = item.cantidad;
+        
+        if (unidadesSueltasDisponibles >= cantidadSolicitada) {
+          // Si hay suficientes unidades sueltas, simplemente las restamos
+          await Product.findByIdAndUpdate(
+            item.productoId,
+            { $inc: { cantidadUnidadesSueltas: -cantidadSolicitada } }
+          );
+        } else {
+          // Si no hay suficientes unidades sueltas, tenemos que "abrir" paquetes
+          const unidadesFaltantes = cantidadSolicitada - unidadesSueltasDisponibles;
+          const paquetesNecesarios = Math.ceil(unidadesFaltantes / cantidadPorPaquete);
+          const nuevasUnidadesSueltas = (paquetesNecesarios * cantidadPorPaquete) - unidadesFaltantes;
+          
+          await Product.findByIdAndUpdate(
+            item.productoId,
+            {
+              $set: { cantidadUnidadesSueltas: nuevasUnidadesSueltas },
+              $inc: { cantidadPaquetes: -paquetesNecesarios }
+            }
+          );
+        }
+      }
+    }
+    
+    // Si es venta a crédito, crear deuda
+    if (body.esCredito && body.clienteId) {
+      const debtor = await Debtor.findById(body.clienteId);
+      if (debtor) {
+        debtor.deudas.push({
+          venta: venta._id,
+          productos: productosVenta,
+          montoTotal,
+          montoPendiente: montoTotal,
+          estado: 'pendiente',
+          fecha: new Date()
+        });
+        await debtor.save();
+      }
+    }
+    
+    return NextResponse.json(venta);
   } catch (error) {
+    console.error('Error en API de ventas:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Error al crear venta', message: error.message },
       { status: 500 }
     );
   }

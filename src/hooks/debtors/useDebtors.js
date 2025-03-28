@@ -16,7 +16,8 @@ export const useDebtors = () => {
     deleteDebtor,
     setSelectedDebtor,
     setLoading,
-    setError
+    setError,
+    fetchDebtorById
   } = useDebtorsStore();
 
   const fetchDebtors = useCallback(async () => {
@@ -50,35 +51,52 @@ export const useDebtors = () => {
   const createDebtor = useCallback(async (debtorData) => {
     try {
       setLoading(true);
+      setError(null);
       
-      if (!debtorData.deudas) {
-        debtorData.deudas = [];
+      // Validar datos requeridos
+      if (!debtorData.nombre?.trim() || !debtorData.apellido?.trim()) {
+        throw new Error('Nombre y apellido son requeridos');
       }
+      
+      // Preparar datos para enviar
+      const cleanData = {
+        nombre: debtorData.nombre.trim(),
+        apellido: debtorData.apellido.trim(),
+        telefono: debtorData.telefono?.trim() || '',
+        direccion: debtorData.direccion?.trim() || '',
+        email: debtorData.email?.trim() || 'cliente@sistemaventas.com',
+        deudas: []
+      };
+      
+      // Log para debugging
+      console.log('Enviando datos al servidor:', cleanData);
       
       const response = await fetch('/api/debtors', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(debtorData)
+        body: JSON.stringify(cleanData)
       });
       
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Error al crear deudor');
       }
-    
-      const newDebtor = await response.json();
       
-      if (!newDebtor.deudas) {
-        newDebtor.deudas = [];
+      const newDebtor = await response.json();
+      console.log('Respuesta del servidor:', newDebtor);
+      
+      if (!newDebtor._id) {
+        throw new Error('El servidor no devolvió un ID válido');
       }
       
+      // Actualizar el estado local
       addDebtor(newDebtor);
       
       return newDebtor;
     } catch (error) {
-      console.error('Error creating debtor:', error);
+      console.error('Error al crear deudor:', error);
       setError(error.message);
       throw error;
     } finally {
@@ -131,26 +149,13 @@ export const useDebtors = () => {
     }
   }, [deleteDebtor, setError, setLoading]);
 
-  const fetchDebtorById = useCallback(async (id) => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/debtors/${id}`);
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.message);
-      
-      setSelectedDebtor(data);
-      setError(null);
-    } catch (error) {
-      setError(error.message);
-      toast.error('Error al cargar los datos del deudor');
-    } finally {
-      setLoading(false);
-    }
-  }, [setSelectedDebtor, setError, setLoading]);
-
   const addPaymentToDebt = useCallback(async (debtorId, debtId, paymentData) => {
     try {
+      // Verificar si es un ID temporal
+      if (debtId.startsWith('temp-')) {
+        throw new Error('No se puede registrar abonos en deudas temporales. Espere a que se sincronice la información.');
+      }
+      
       setLoading(true);
       const response = await fetch(`/api/debtors/${debtorId}/debts/${debtId}/payments`, {
         method: 'POST',
@@ -201,6 +206,7 @@ export const useDebtors = () => {
     error,
     selectedDebtor,
     fetchDebtors,
+    fetchDebtorById,
     createDebtor,
     updateDebtorById,
     deleteDebtorById,

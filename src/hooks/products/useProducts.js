@@ -12,14 +12,25 @@ export const useProducts = () => {
   const fetchProducts = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/products');
+      const response = await fetch('/api/products?populate=categoria');
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Error al cargar productos');
       }
       
       const data = await response.json();
-      setProducts(data);
+      
+      // Asegurar que todos los campos necesarios estén presentes
+      const normalizedProducts = data.map(product => ({
+        ...product,
+        precioVenta: product.precioVenta || (product.precioCompra * (1 + (product.porcentajeGanancia || 0) / 100)),
+        cantidadPorPaquete: product.cantidadPorPaquete || 1,
+        // Extraer ID de categoría si es un objeto
+        categoria: product.categoria?._id || product.categoria || ''
+      }));
+      
+      setProducts(normalizedProducts);
       setError(null);
     } catch (error) {
       setError(error.message);
