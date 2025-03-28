@@ -41,7 +41,11 @@ const createSaleSchema = (esCredito) => {
 };
 
 // Componente para cada producto en la lista
-function ProductListItem({ product, index, register, onRemove, disabled, errors }) {
+function ProductListItem({ product, index, register, onRemove, disabled, errors, watch }) {
+  const cantidad = parseInt(watch(`productos.${index}.cantidad`)) || 0;
+  const precioUnitario = product ? (product.precioCompra * (1 + product.porcentajeGanancia / 100)) : 0;
+  const subtotal = precioUnitario * cantidad;
+  
   return (
     <div key={index} className="flex items-center gap-4 p-3 rounded-md border bg-card">
       <div className="flex-1">
@@ -60,6 +64,10 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors 
           max={product?.cantidadInventario || 999}
           {...register(`productos.${index}.cantidad`, {
             valueAsNumber: true,
+            onChange: (e) => {
+              // Puede añadir un trigger para recalcular el total si es necesario
+              // trigger();
+            },
             max: {
               value: product?.cantidadInventario || 999,
               message: `Máximo ${product?.cantidadInventario} unidades`
@@ -74,10 +82,13 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors 
         )}
       </div>
       
-      <div className="w-20 text-right">
+      <div className="w-24 text-right">
         <Label>Precio</Label>
         <div className="mt-2 font-semibold">
-          ${product ? (product.precioCompra * (1 + product.porcentajeGanancia / 100)).toFixed(2) : '0.00'}
+          ${subtotal.toFixed(2)}
+          <div className="text-xs text-muted-foreground">
+            {cantidad} x ${precioUnitario.toFixed(2)}
+          </div>
         </div>
       </div>
       
@@ -155,14 +166,14 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     const existingIndex = fields.findIndex(f => f.productoId === productId);
     
     if (existingIndex >= 0) {
-      // Si existe, mantener la cantidad existente
-      // No hacemos nada ya que el producto ya está en la lista
-      return;
+      // Si existe, usamos la cantidad proporcionada o incrementamos en 1
+      const currentQty = parseInt(watch(`productos.${existingIndex}.cantidad`)) || 0;
+      setValue(`productos.${existingIndex}.cantidad`, cantidad || currentQty + 1);
     } else {
-      // Si no existe, agregar con la cantidad especificada
+      // Si no existe, agregar con la cantidad especificada o 1 por defecto
       append({ 
         productoId: productId,
-        cantidad: cantidad
+        cantidad: cantidad || 1
       });
     }
     
@@ -171,7 +182,7 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
       if (prev.includes(productId)) return prev;
       return [...prev, productId];
     });
-  }, [fields, append, setSelectedProducts]);
+  }, [fields, watch, setValue, append, setSelectedProducts]);
 
   const handleRemoveProduct = useCallback((index) => {
     const productId = fields[index].productoId;
@@ -181,18 +192,19 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     setSelectedProducts(prev => prev.filter(id => id !== productId));
   }, [fields, remove, setSelectedProducts]);
 
-  // Calcular total
+  // Calcular total correctamente basado en la cantidad actual
   const total = useMemo(() => {
     return fields.reduce((sum, field, index) => {
       const product = products.find(p => p._id === field.productoId);
-      const cantidad = productosFields[index]?.cantidad || 0;
+      // Obtener la cantidad actual del campo, asegurándose que sea un número
+      const cantidad = parseInt(watch(`productos.${index}.cantidad`)) || 0;
       
       if (!product) return sum;
       
       const precio = product.precioCompra * (1 + product.porcentajeGanancia / 100);
       return sum + (precio * cantidad);
     }, 0);
-  }, [fields, products, productosFields]);
+  }, [fields, products, watch]);
 
   // Manejar envío del formulario
   const onSubmit = async (data) => {
@@ -251,10 +263,9 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
         </h2>
         
         <ProductSearchSelector
-          onProductSelect={(productId) => {
-            handleAddProduct(productId, 1);
+          onProductSelect={(productId, cantidad) => {
+            handleAddProduct(productId, cantidad);
           }}
-          onQuantityChange={() => {}} // Este callback no se usa directamente aquí
           selectedProducts={selectedProducts}
           disabled={isSubmitting}
         />
@@ -285,9 +296,16 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
                     onRemove={() => handleRemoveProduct(index)}
                     disabled={isSubmitting}
                     errors={errors}
+                    watch={watch}
                   />
                 );
               })}
+            </div>
+            
+            {/* Mostrar el total acumulado debajo de la lista de productos */}
+            <div className="mt-4 text-right">
+              <span className="text-sm text-muted-foreground mr-2">Subtotal:</span>
+              <span className="font-bold">${total.toFixed(2)}</span>
             </div>
           </div>
         )}

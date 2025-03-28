@@ -11,17 +11,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const ProductSearchSelector = memo(function ProductSearchSelector({ 
-  onProductSelect, 
-  onQuantityChange,
+  onProductSelect,
   selectedProducts = [],
   disabled = false
 }) {
-  const { products, isLoading } = useProducts();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const { products } = useProducts();
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const searchRef = useRef(null);
+  const [quantity, setQuantity] = useState(1);
 
   // Productos disponibles (con stock)
   const availableProducts = useMemo(() => {
@@ -30,58 +27,31 @@ const ProductSearchSelector = memo(function ProductSearchSelector({
   
   // Productos filtrados por búsqueda
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return availableProducts;
+    if (!searchQuery.trim()) return availableProducts;
     
-    const lowerSearchTerm = searchTerm.toLowerCase();
+    const lowerSearchQuery = searchQuery.toLowerCase();
     return availableProducts.filter(product => 
-      product.nombre.toLowerCase().includes(lowerSearchTerm) ||
-      product.descripcion?.toLowerCase().includes(lowerSearchTerm) ||
-      product.categoria?.toLowerCase().includes(lowerSearchTerm)
+      product.nombre.toLowerCase().includes(lowerSearchQuery) ||
+      product.descripcion?.toLowerCase().includes(lowerSearchQuery) ||
+      product.categoria?.toLowerCase().includes(lowerSearchQuery)
     );
-  }, [availableProducts, searchTerm]);
+  }, [availableProducts, searchQuery]);
 
-  // Manejar clicks fuera del componente
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  // Manejar selección de producto
-  const handleSelectProduct = (product) => {
+  const handleSelectProduct = (productId) => {
+    const product = products.find(p => p._id === productId);
     setSelectedProduct(product);
-    setSearchTerm(product.nombre);
-    setIsDropdownOpen(false);
-    
-    // Reset cantidad a 1 al seleccionar un nuevo producto
+    // Resetear la cantidad a 1 cuando se selecciona un nuevo producto
     setQuantity(1);
   };
 
-  // Manejar cambio de cantidad
-  const handleQuantityChange = (e) => {
-    const newQuantity = parseInt(e.target.value);
-    if (newQuantity > 0 && selectedProduct && newQuantity <= selectedProduct.cantidadInventario) {
-      setQuantity(newQuantity);
-    }
-  };
-
-  // Añadir producto a la venta
-  const handleAddProduct = () => {
-    if (selectedProduct && quantity > 0) {
-      onProductSelect(selectedProduct._id);
-      onQuantityChange(quantity);
-      
-      // Limpiar selección
+  const handleAddToSale = () => {
+    if (selectedProduct) {
+      // Pasar el ID del producto y la cantidad actual al controlador
+      onProductSelect(selectedProduct._id, quantity);
+      // Limpiar después de agregar
       setSelectedProduct(null);
-      setSearchTerm('');
-      setQuantity(1);
+      setSearchQuery('');
+      // No reseteamos la cantidad para mantener el comportamiento deseado
     }
   };
 
@@ -94,7 +64,7 @@ const ProductSearchSelector = memo(function ProductSearchSelector({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2 w-full" ref={searchRef}>
+        <div className="space-y-2 w-full">
           <Label htmlFor="product-search" className="font-medium">
             Buscar Producto
             <span className="ml-1 text-sm text-muted-foreground">
@@ -109,22 +79,20 @@ const ProductSearchSelector = memo(function ProductSearchSelector({
                 <Input
                   id="product-search"
                   placeholder="Ej: Doritos, Glup, Caramelos"
-                  value={searchTerm}
+                  value={searchQuery}
                   onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setIsDropdownOpen(true);
+                    setSearchQuery(e.target.value);
                   }}
-                  onFocus={() => setIsDropdownOpen(true)}
                   className="pl-8 pr-8"
                   disabled={disabled}
                 />
-                {searchTerm && (
+                {searchQuery && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="absolute right-0 top-0 h-full"
                     onClick={() => {
-                      setSearchTerm('');
+                      setSearchQuery('');
                       setSelectedProduct(null);
                     }}
                     disabled={disabled}
@@ -133,118 +101,95 @@ const ProductSearchSelector = memo(function ProductSearchSelector({
                   </Button>
                 )}
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="ml-2"
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                disabled={disabled}
-                title={isDropdownOpen ? "Cerrar lista" : "Ver lista de productos"}
-              >
-                {isDropdownOpen ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </Button>
             </div>
-
-            {/* Dropdown de resultados */}
-            <AnimatePresence>
-              {isDropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute z-50 mt-1 w-full bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto"
-                >
-                  {isLoading ? (
-                    <div className="p-2 text-center text-sm text-muted-foreground">
-                      Cargando productos...
-                    </div>
-                  ) : filteredProducts.length === 0 ? (
-                    <div className="p-2 text-center text-sm text-muted-foreground">
-                      No se encontraron productos disponibles
-                    </div>
-                  ) : (
-                    <ul className="py-1">
-                      {filteredProducts.map((product) => {
-                        // Verificar si el producto ya está en la lista de seleccionados
-                        const isAlreadySelected = selectedProducts.some(
-                          id => id === product._id
-                        );
-                        
-                        return (
-                          <li
-                            key={product._id}
-                            className={`px-3 py-2 hover:bg-muted cursor-pointer flex justify-between items-center ${
-                              isAlreadySelected ? 'opacity-50' : ''
-                            }`}
-                            onClick={() => !isAlreadySelected && handleSelectProduct(product)}
-                          >
-                            <div>
-                              <p className="font-medium">{product.nombre}</p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>Precio: ${product.precioVenta?.toFixed(2) || product.precioCompra.toFixed(2)}</span>
-                                <span>•</span>
-                                <span>Stock: {product.cantidadInventario}</span>
-                              </div>
-                            </div>
-                            {isAlreadySelected ? (
-                              <Badge variant="outline">Ya agregado</Badge>
-                            ) : (
-                              <Badge variant="secondary">Disponible</Badge>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
+        </div>
 
-          {/* Input de cantidad */}
-          {selectedProduct && (
-            <div className="mt-4 border p-3 rounded-md bg-muted/20">
-              <div className="font-medium mb-2">Producto seleccionado: {selectedProduct.nombre}</div>
-              <div className="text-sm mb-3">
-                <span className="text-muted-foreground">Precio unitario:</span> ${(selectedProduct.precioVenta || selectedProduct.precioCompra * (1 + selectedProduct.porcentajeGanancia / 100)).toFixed(2)} | 
-                <span className="text-muted-foreground ml-2">Stock disponible:</span> {selectedProduct.cantidadInventario}
+        {selectedProduct ? (
+          <div className="border p-4 rounded-md">
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+              <div>
+                <h3 className="font-medium">Producto seleccionado: {selectedProduct.nombre}</h3>
+                <p className="text-sm text-muted-foreground">
+                  Precio unitario: ${(selectedProduct.precioCompra * (1 + selectedProduct.porcentajeGanancia / 100)).toFixed(2)} | Stock disponible: {selectedProduct.cantidadInventario}
+                </p>
               </div>
-              
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Label htmlFor="product-quantity" className="mb-1 block">
-                    Cantidad a vender
-                  </Label>
+
+              <div className="flex gap-2 items-center">
+                <div className="w-24">
+                  <Label htmlFor="add-quantity">Cantidad a vender</Label>
                   <Input
-                    id="product-quantity"
+                    id="add-quantity"
                     type="number"
                     min="1"
                     max={selectedProduct.cantidadInventario}
                     value={quantity}
-                    onChange={handleQuantityChange}
-                    className="w-full"
-                    placeholder="Ej: 1, 2, 3..."
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                     disabled={disabled}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Máximo disponible: {selectedProduct.cantidadInventario}
                   </p>
                 </div>
-                <Button 
-                  onClick={handleAddProduct}
-                  disabled={!selectedProduct || quantity < 1 || disabled}
-                  className="mb-1"
+
+                <Button
+                  onClick={handleAddToSale}
+                  disabled={disabled || quantity < 1 || quantity > selectedProduct.cantidadInventario}
+                  className="mt-6"
                 >
                   Agregar a la venta
                 </Button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          searchQuery.trim().length > 0 && (
+            <div className="border rounded-md overflow-hidden">
+              <div className="bg-muted px-4 py-2 font-medium">
+                Resultados
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {filteredProducts.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    No se encontraron productos
+                  </div>
+                ) : (
+                  <div>
+                    {filteredProducts.map(product => (
+                      <div
+                        key={product._id}
+                        className={`
+                          p-3 border-b last:border-0 flex justify-between items-center
+                          hover:bg-muted/50 cursor-pointer transition-colors
+                          ${selectedProducts.includes(product._id) ? 'opacity-50 pointer-events-none' : ''}
+                        `}
+                        onClick={() => handleSelectProduct(product._id)}
+                        disabled={selectedProducts.includes(product._id) || disabled}
+                      >
+                        <div>
+                          <div className="font-medium">{product.nombre}</div>
+                          <div className="text-sm text-muted-foreground">
+                            Stock: {product.cantidadInventario} | 
+                            Precio: ${(product.precioCompra * (1 + product.porcentajeGanancia / 100)).toFixed(2)}
+                          </div>
+                        </div>
+                        {selectedProducts.includes(product._id) ? (
+                          <Badge variant="outline">
+                            Ya agregado
+                          </Badge>
+                        ) : (
+                          <Button variant="ghost" size="sm">
+                            Seleccionar
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
       </CardContent>
     </Card>
   );
