@@ -11,11 +11,6 @@ const useDebtorsStore = create(
 
       setDebtors: (debtors) => set({ debtors }),
       
-      addDebtor: (debtor) => 
-        set((state) => ({ 
-          debtors: [...state.debtors, debtor] 
-        })),
-      
       updateDebtor: (updatedDebtor) =>
         set((state) => ({
           debtors: state.debtors.map((debtor) =>

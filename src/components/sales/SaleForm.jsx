@@ -108,7 +108,7 @@ function ProductListItem({ product, index, register, onRemove, disabled, errors,
 
 const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
   const { products } = useProducts();
-  const { debtors, fetchDebtors } = useDebtors();
+  const { debtors = [], fetchDebtors, addDebtor } = useDebtors();
   const { createSale } = useSales();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDebtorModal, setShowDebtorModal] = useState(false);
@@ -246,12 +246,36 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
     }
   };
 
-  // Manejar creación de deudor
+  // Manejar creación de deudor - solución alternativa
   const handleDebtorCreated = useCallback((newDebtor) => {
+    if (!newDebtor) {
+      console.error('Error: No se recibió información del deudor');
+      toast.error('Error al procesar información del nuevo deudor');
+      return;
+    }
+    
+    if (!newDebtor._id) {
+      console.error('Error: Deudor sin ID válido', newDebtor);
+      toast.error('Error: El deudor creado no tiene un ID válido');
+      return;
+    }
+    
+    // Establecer el ID del deudor en el formulario
     setValue('clienteId', newDebtor._id);
+    
+    // Cerrar el modal
     setShowDebtorModal(false);
+    
+    // Actualizar la lista de deudores usando ambos métodos
+    // 1. Añadir directamente al estado de Zustand
+    addDebtor(newDebtor);
+    
+    // 2. Refrescar desde la API para garantizar consistencia
+    fetchDebtors();
+    
+    // Notificar éxito
     toast.success(`Deudor ${newDebtor.nombre} ${newDebtor.apellido} creado exitosamente`);
-  }, [setValue]);
+  }, [setValue, fetchDebtors, addDebtor]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -366,11 +390,17 @@ const SaleForm = memo(function SaleForm({ onSuccess, onCreditSale }) {
                                 <SelectValue placeholder="Seleccionar cliente" />
                               </SelectTrigger>
                               <SelectContent>
-                                {debtors.map(debtor => (
-                                  <SelectItem key={debtor._id} value={debtor._id}>
-                                    {debtor.nombre} {debtor.apellido}
+                                {Array.isArray(debtors) && debtors.length > 0 ? (
+                                  debtors.map(debtor => (
+                                    <SelectItem key={debtor._id} value={debtor._id}>
+                                      {debtor.nombre} {debtor.apellido}
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <SelectItem value="none" disabled>
+                                    No hay clientes disponibles
                                   </SelectItem>
-                                ))}
+                                )}
                               </SelectContent>
                             </Select>
                           )}

@@ -19,59 +19,62 @@ const debtorSchema = new mongoose.Schema({
     type: String,
     required: [true, 'La dirección es requerida']
   },
-  deudas: [{
-    productos: [{
-      producto: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product',
-        required: true
-      },
-      cantidad: {
+  deudas: {
+    type: [{
+      productos: [{
+        producto: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Product',
+          required: true
+        },
+        cantidad: {
+          type: Number,
+          required: true,
+          min: [1, 'La cantidad debe ser mayor a 0']
+        },
+        precioUnitario: {
+          type: Number,
+          required: true
+        },
+        subtotal: {
+          type: Number,
+          required: true
+        }
+      }],
+      montoTotal: {
         type: Number,
         required: true,
-        min: [1, 'La cantidad debe ser mayor a 0']
+        min: [0, 'El monto no puede ser negativo']
       },
-      precioUnitario: {
-        type: Number,
-        required: true
-      },
-      subtotal: {
-        type: Number,
-        required: true
-      }
-    }],
-    montoTotal: {
-      type: Number,
-      required: true,
-      min: [0, 'El monto no puede ser negativo']
-    },
-    montoPendiente: {
-      type: Number,
-      required: true,
-      min: [0, 'El monto pendiente no puede ser negativo']
-    },
-    estado: {
-      type: String,
-      enum: ['pendiente', 'pagada', 'vencida'],
-      default: 'pendiente'
-    },
-    abonos: [{
-      monto: {
+      montoPendiente: {
         type: Number,
         required: true,
-        min: [0, 'El monto del abono no puede ser negativo']
+        min: [0, 'El monto pendiente no puede ser negativo']
       },
-      fecha: {
+      estado: {
+        type: String,
+        enum: ['pendiente', 'pagada', 'vencida'],
+        default: 'pendiente'
+      },
+      abonos: [{
+        monto: {
+          type: Number,
+          required: true,
+          min: [0, 'El monto del abono no puede ser negativo']
+        },
+        fecha: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      descripcion: String,
+      createdAt: {
         type: Date,
         default: Date.now
       }
     }],
-    descripcion: String,
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
+    default: []
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -87,6 +90,9 @@ const debtorSchema = new mongoose.Schema({
 // Middleware para actualizar updatedAt antes de cada actualización
 debtorSchema.pre('save', function(next) {
   this.updatedAt = new Date();
+  if (!this.deudas) {
+    this.deudas = [];
+  }
   next();
 });
 

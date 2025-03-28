@@ -39,7 +39,7 @@ const debtorSchema = z.object({
 
 const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor, onSuccess }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { createDebtor, updateDebtorById } = useDebtors();
+  const { createDebtor, updateDebtorById, fetchDebtors } = useDebtors();
   
   const form = useForm({
     resolver: zodResolver(debtorSchema),
@@ -50,6 +50,7 @@ const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor,
       direccion: '',
       email: 'cliente@sistemaventas.com', // Email genérico predeterminado
       descripcion: '',
+      deudas: [] // Añadido para inicializar deudas como array vacío
     },
   });
   
@@ -79,18 +80,33 @@ const DebtorFormModal = memo(function DebtorFormModal({ isOpen, onClose, debtor,
   const onSubmit = async (data) => {
     try {
       setIsSubmitting(true);
+      let response;
+      
+      if (!data.deudas) {
+        data.deudas = [];
+      }
       
       if (debtor) {
-        await updateDebtorById(debtor._id, data);
+        response = await updateDebtorById(debtor._id, data);
         toast.success('Deudor actualizado correctamente');
       } else {
-        await createDebtor(data);
+        response = await createDebtor(data);
+        
+        // Forzar actualización de la lista de deudores
+        await fetchDebtors();
+        
         toast.success('Deudor creado correctamente');
       }
       
-      onSuccess();
+      if (response && response._id) {
+        onSuccess?.(response);
+      } else {
+        console.error('Respuesta inválida:', response);
+        toast.error('Error: La respuesta no contiene un ID de deudor válido');
+      }
     } catch (error) {
-      toast.error(error.message || 'Ha ocurrido un error');
+      console.error('Error en formulario de deudor:', error);
+      toast.error(error.message || 'Error al procesar el formulario');
     } finally {
       setIsSubmitting(false);
     }

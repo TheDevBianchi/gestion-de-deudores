@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback } from 'react';
 import useDebtorsStore from '@/states/useDebtorsStore';
 import { toast } from 'sonner';
@@ -9,7 +11,6 @@ export const useDebtors = () => {
     error,
     selectedDebtor,
     setDebtors,
-    addDebtor,
     updateDebtor,
     deleteDebtor,
     setSelectedDebtor,
@@ -20,16 +21,26 @@ export const useDebtors = () => {
   const fetchDebtors = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch('/api/debtors');
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar deudores');
+      }
+      
       const data = await response.json();
       
-      if (!response.ok) throw new Error(data.message);
-      
-      setDebtors(data);
-      setError(null);
-    } catch (error) {
-      setError(error.message);
-      toast.error('Error al cargar los deudores');
+      if (Array.isArray(data)) {
+        setDebtors(data);
+      } else {
+        setDebtors([]);
+        console.error('La API no devolvió un array de deudores:', data);
+      }
+    } catch (err) {
+      console.error('Error fetching debtors:', err);
+      setError(err.message);
+      setDebtors([]);
+      toast.error('Error al cargar deudores');
     } finally {
       setLoading(false);
     }
@@ -38,26 +49,44 @@ export const useDebtors = () => {
   const createDebtor = useCallback(async (debtorData) => {
     try {
       setLoading(true);
+      
+      if (!debtorData.deudas) {
+        debtorData.deudas = [];
+      }
+      
       const response = await fetch('/api/debtors', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(debtorData)
       });
-      const data = await response.json();
       
-      if (!response.ok) throw new Error(data.message);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al crear deudor');
+      }
+    
+      const newDebtor = await response.json();
       
-      addDebtor(data);
-      toast.success('Deudor creado exitosamente');
-      return data;
+      if (!newDebtor.deudas) {
+        newDebtor.deudas = [];
+      }
+      
+      setDebtors(prev => {
+        const currentDebtors = Array.isArray(prev) ? prev : [];
+        return [newDebtor, ...currentDebtors];
+      });
+      
+      return newDebtor;
     } catch (error) {
+      console.error('Error creating debtor:', error);
       setError(error.message);
-      toast.error('Error al crear el deudor');
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [addDebtor, setError, setLoading]);
+  }, [setDebtors, setError, setLoading]);
 
   const updateDebtorById = useCallback(async (id, debtorData) => {
     try {
@@ -169,18 +198,17 @@ export const useDebtors = () => {
   }, [setSelectedDebtor, updateDebtor, setError, setLoading]);
 
   return {
-    debtors,
+    debtors: Array.isArray(debtors) ? debtors : [],
     isLoading,
     error,
     selectedDebtor,
-    setSelectedDebtor,
     fetchDebtors,
-    fetchDebtorById,
     createDebtor,
     updateDebtorById,
     deleteDebtorById,
-    addPaymentToDebt,
     addDebtToDebtor,
+    addPaymentToDebt,
+    setSelectedDebtor
   };
 };
 

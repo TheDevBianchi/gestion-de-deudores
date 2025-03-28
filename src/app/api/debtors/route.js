@@ -27,49 +27,20 @@ export async function POST(request) {
     await dbConnect();
     const data = await request.json();
     
-    // Validar que los datos requeridos estén presentes
-    if (!data.nombre || !data.apellido || !data.telefono || !data.direccion) {
-      return NextResponse.json(
-        { message: 'Faltan campos requeridos' },
-        { status: 400 }
-      );
+    // Asegurarse de que el campo deudas esté presente
+    if (!data.deudas) {
+      data.deudas = [];
     }
-
-    // Si hay deudas, validar que tengan los campos necesarios
-    if (data.deudas && data.deudas.length > 0) {
-      for (const deuda of data.deudas) {
-        if (!deuda.productos || !deuda.productos.length) {
-          return NextResponse.json(
-            { message: 'Cada deuda debe tener al menos un producto' },
-            { status: 400 }
-          );
-        }
-      }
-    }
-
-    const debtor = await Debtor.create(data);
-    await debtor.populate('deudas.productos.producto');
     
-    return NextResponse.json(debtor, { status: 201 });
+    // Crear el deudor
+    const newDebtor = await Debtor.create(data);
+    
+    // Devolver el objeto completo
+    return NextResponse.json(newDebtor);
   } catch (error) {
-    console.error('Error en POST /api/debtors:', error);
-    
-    // Manejar errores de validación de Mongoose
-    if (error.name === 'ValidationError') {
-      return NextResponse.json(
-        { 
-          message: 'Error de validación',
-          errors: Object.values(error.errors).map(err => err.message)
-        },
-        { status: 400 }
-      );
-    }
-
+    console.error('Error creando deudor:', error);
     return NextResponse.json(
-      { 
-        message: 'Error al crear el deudor',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
-      },
+      { error: error.message || 'Error al crear deudor' },
       { status: 500 }
     );
   }
