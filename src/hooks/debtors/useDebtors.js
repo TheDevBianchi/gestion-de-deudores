@@ -11,6 +11,7 @@ export const useDebtors = () => {
     error,
     selectedDebtor,
     setDebtors,
+    addDebtor,
     updateDebtor,
     deleteDebtor,
     setSelectedDebtor,
@@ -73,10 +74,7 @@ export const useDebtors = () => {
         newDebtor.deudas = [];
       }
       
-      setDebtors(prev => {
-        const currentDebtors = Array.isArray(prev) ? prev : [];
-        return [newDebtor, ...currentDebtors];
-      });
+      addDebtor(newDebtor);
       
       return newDebtor;
     } catch (error) {
@@ -86,7 +84,7 @@ export const useDebtors = () => {
     } finally {
       setLoading(false);
     }
-  }, [setDebtors, setError, setLoading]);
+  }, [addDebtor, setError, setLoading]);
 
   const updateDebtorById = useCallback(async (id, debtorData) => {
     try {
@@ -208,7 +206,8 @@ export const useDebtors = () => {
     deleteDebtorById,
     addDebtToDebtor,
     addPaymentToDebt,
-    setSelectedDebtor
+    setSelectedDebtor,
+    addDebtor
   };
 };
 
