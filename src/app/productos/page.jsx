@@ -12,7 +12,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   ChevronsLeft, 
-  ChevronsRight,
+  ChevronsRight, 
   HelpCircle
 } from 'lucide-react';
 import ProductFormModal from '@/components/products/ProductFormModal';
@@ -41,7 +41,6 @@ const tableColumns = [
   { id: 'costo', abbr: 'Costo', full: 'Precio de Compra' },
   { id: 'precioVenta', abbr: 'P. Paq', full: 'Precio por Paquete' },
   { id: 'precioUnitario', abbr: 'P. Unit', full: 'Precio Unitario' },
-  { id: 'precioBs', abbr: 'Precio en Bs', full: 'Precio en Bolívares con diferentes tasas' },
   { id: 'categoria', abbr: 'Cat', full: 'Categoría' },
   { id: 'stock', abbr: 'Stock', full: 'Unidades Disponibles' },
   { id: 'estado', abbr: 'Estado', full: 'Estado del Producto' },
@@ -453,55 +452,65 @@ const ProductosPage = memo(function ProductosPage() {
                       <div className={tableStyles.tdPrice}>${product.precioCompra?.toFixed(2) || "0.00"}</div>
                     </td>
                     <td className={tableStyles.td}>
-                      <div className={tableStyles.tdPrice}>${product.precioVenta?.toFixed(2) || "0.00"}</div>
+                      <div className="flex flex-col">
+                        <div className={tableStyles.tdPrice}>${product.precioVenta?.toFixed(2) || "0.00"}</div>
+                        <div className="mt-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger className="text-xs text-blue-500 cursor-help flex items-center">
+                                <span>Ver en Bs.</span>
+                                <HelpCircle className="ml-1 h-3 w-3" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="w-60">
+                                <div className="space-y-1">
+                                  <div className="flex justify-between">
+                                    <span>BCV:</span>
+                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * centralBankPrice).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Promedio:</span>
+                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * averagePrice).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Paralelo:</span>
+                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * parallelPrice).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      </div>
                     </td>
                     <td className={tableStyles.td}>
-                      <div className={tableStyles.tdPrice}>${product.precioUnitario?.toFixed(2) || "0.00"}</div>
-                    </td>
-                    {/* Columna combinada de precios en bolívares */}
-                    <td className={tableStyles.td}>
-                      <div className="space-y-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center">
-                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * averagePrice).toFixed(2)}</div>
-                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                              <p>Precio con Tasa Promedio</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center">
-                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * centralBankPrice).toFixed(2)}</div>
-                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                              <p>Precio con Tasa BCV</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center">
-                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * parallelPrice).toFixed(2)}</div>
-                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                              <p>Precio con Tasa Paralelo</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                      <div className="flex flex-col">
+                        <div className={tableStyles.tdPrice}>${product.precioUnitario?.toFixed(2) || "0.00"}</div>
+                        <div className="mt-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger className="text-xs text-blue-500 cursor-help flex items-center">
+                                <span>Ver en Bs.</span>
+                                <HelpCircle className="ml-1 h-3 w-3" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="w-60">
+                                <div className="space-y-1">
+                                  <div className="flex justify-between">
+                                    <span>BCV:</span>
+                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * centralBankPrice).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Promedio:</span>
+                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * averagePrice).toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Paralelo:</span>
+                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * parallelPrice).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       </div>
                     </td>
                     <td className={tableStyles.td}>
