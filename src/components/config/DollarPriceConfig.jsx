@@ -24,7 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { RefreshCw, Save, Check, Clipboard } from 'lucide-react';
+import { RefreshCw, Save, Check, Clipboard, Loader2 } from 'lucide-react';
 
 // Esquema para validación
 const priceSchema = z.object({
@@ -36,7 +36,7 @@ const priceSchema = z.object({
 
 // Historial de precios
 const PriceHistory = memo(function PriceHistory({ history }) {
-  if (!history || history.length === 0) {
+  if (!history || !Array.isArray(history) || history.length === 0) {
     return <p className="text-sm text-muted-foreground">No hay historial disponible.</p>;
   }
 
@@ -71,7 +71,9 @@ const PriceHistory = memo(function PriceHistory({ history }) {
 
 const DollarPriceConfig = memo(function DollarPriceConfig() {
   const { 
-    price, 
+    averagePrice, 
+    centralBankPrice, 
+    parallelPrice,
     isLoading, 
     error, 
     fetchDollarPrice, 
@@ -82,26 +84,52 @@ const DollarPriceConfig = memo(function DollarPriceConfig() {
   const [updating, setUpdating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   
+  // Esquema actualizado para los tres precios
+  const priceSchema = z.object({
+    average: z.string().min(1, 'El precio es requerido')
+      .refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+        message: 'Debe ser un número mayor que 0'
+      }),
+    centralBank: z.string().min(1, 'El precio es requerido')
+      .refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+        message: 'Debe ser un número mayor que 0'
+      }),
+    parallel: z.string().min(1, 'El precio es requerido')
+      .refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+        message: 'Debe ser un número mayor que 0'
+      })
+  });
+  
   // Configurar formulario con React Hook Form
   const form = useForm({
     resolver: zodResolver(priceSchema),
     defaultValues: {
-      price: ''
+      average: '',
+      centralBank: '',
+      parallel: ''
     }
   });
   
-  // Actualizar el formulario cuando cambia el precio
+  // Actualizar el formulario cuando cambian los precios
   useEffect(() => {
-    if (price) {
-      form.reset({ price });
+    if (averagePrice && centralBankPrice && parallelPrice) {
+      form.reset({ 
+        average: averagePrice.toString(),
+        centralBank: centralBankPrice.toString(),
+        parallel: parallelPrice.toString()
+      });
     }
-  }, [price, form]);
+  }, [averagePrice, centralBankPrice, parallelPrice, form]);
   
   // Manejar envío del formulario
   const onSubmit = useCallback(async (data) => {
     try {
       setUpdating(true);
-      await updateDollarPrice(data.price);
+      await updateDollarPrice({
+        average: data.average,
+        centralBank: data.centralBank,
+        parallel: data.parallel
+      });
     } catch (error) {
       // El error ya se maneja en el hook
     } finally {
@@ -111,86 +139,117 @@ const DollarPriceConfig = memo(function DollarPriceConfig() {
   
   // Manejar copia al portapapeles
   const handleCopyToClipboard = useCallback(() => {
-    if (price) {
-      navigator.clipboard.writeText(price.toString())
+    if (averagePrice || centralBankPrice || parallelPrice) {
+      navigator.clipboard.writeText(
+        [averagePrice, centralBankPrice, parallelPrice].join(', ')
+      )
         .then(() => {
           setCopySuccess(true);
           setTimeout(() => setCopySuccess(false), 2000);
         })
         .catch(() => {});
     }
-  }, [price]);
+  }, [averagePrice, centralBankPrice, parallelPrice]);
+  
+  // Asegurarse de que el historial sea siempre un array para cada tipo de precio
+  const safeHistory = {
+    average: Array.isArray(priceHistory?.average) ? priceHistory.average : [],
+    centralBank: Array.isArray(priceHistory?.centralBank) ? priceHistory.centralBank : [],
+    parallel: Array.isArray(priceHistory?.parallel) ? priceHistory.parallel : []
+  };
   
   return (
     <div className="space-y-8">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Precio Actual del Dólar</CardTitle>
+          <CardTitle>Configuración de Precios del Dólar</CardTitle>
           <CardDescription>
-            Este valor se utiliza para calcular conversiones de moneda en toda la aplicación.
+            Actualiza los valores de las diferentes tasas del dólar
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="price"
+                name="average"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Precio del Dólar</FormLabel>
-                    <div className="flex space-x-2">
-                      <FormControl>
+                    <FormLabel>Precio del Dólar Promedio</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center space-x-2">
                         <Input
-                          {...field}
+                          placeholder="Ingrese el precio promedio"
                           type="number"
                           step="0.01"
-                          min="0.01"
-                          disabled={isLoading || updating}
-                          placeholder="Ingrese el precio del dólar"
+                          min="0"
+                          {...field}
                         />
-                      </FormControl>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        onClick={handleCopyToClipboard}
-                        disabled={!price}
-                      >
-                        {copySuccess ? <Check size={16} /> : <Clipboard size={16} />}
-                      </Button>
-                    </div>
-                    {error ? (
-                      <FormMessage>{error}</FormMessage>
-                    ) : (
-                      <FormDescription>
-                        Ingrese el valor actual del dólar en moneda local.
-                      </FormDescription>
-                    )}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
               
-              <div className="flex space-x-2">
-                <Button 
-                  type="submit" 
-                  disabled={isLoading || updating}
-                  className="gap-2"
-                >
-                  <Save size={16} />
-                  Guardar Cambios
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={fetchDollarPrice}
-                  disabled={isLoading || updating}
-                  className="gap-2"
-                >
-                  <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-                  Actualizar
-                </Button>
-              </div>
+              <FormField
+                control={form.control}
+                name="centralBank"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio del Dólar en Banco Central</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          placeholder="Ingrese el precio del banco central"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          {...field}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="parallel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio del Dólar Paralelo</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          placeholder="Ingrese el precio paralelo"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          {...field}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <Button 
+                type="submit" 
+                disabled={isLoading || updating}
+                className="w-full"
+              >
+                {updating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  'Actualizar Precios'
+                )}
+              </Button>
             </form>
           </Form>
         </CardContent>
@@ -204,7 +263,26 @@ const DollarPriceConfig = memo(function DollarPriceConfig() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PriceHistory history={priceHistory} />
+          <div className="mt-6">
+            <h3 className="font-medium text-lg mb-2">Historial de Precios</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium">Precio Promedio</h4>
+                <PriceHistory history={safeHistory.average} />
+              </div>
+              
+              <div>
+                <h4 className="font-medium">Precio Banco Central</h4>
+                <PriceHistory history={safeHistory.centralBank} />
+              </div>
+              
+              <div>
+                <h4 className="font-medium">Precio Paralelo</h4>
+                <PriceHistory history={safeHistory.parallel} />
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -254,11 +254,23 @@ const NewDebtModal = memo(function NewDebtModal({ isOpen, onClose, debtorId, deb
     try {
       setIsSubmitting(true);
       
-      await addDebtToDebtor(debtorId, data);
-      toast.success('Deuda registrada correctamente');
-      onSuccess();
+      // Asegurarnos de que la fecha esté explícitamente en la data
+      // Esto es crucial para que se almacene correctamente en la base de datos
+      const formattedData = {
+        ...data,
+        fecha: new Date().toISOString() // Formato ISO para fechas
+      };
+      
+      console.log("Enviando datos de deuda con fecha:", formattedData.fecha);
+      
+      // Usar estos datos actualizados para crear la deuda
+      await addDebtToDebtor(debtorId, formattedData);
+      
+      toast.success('Deuda registrada exitosamente');
+      onSuccess?.();
     } catch (error) {
-      toast.error(error.message || 'Error al registrar la deuda');
+      console.error('Error al registrar deuda:', error);
+      toast.error(error.message || 'Error al registrar deuda');
     } finally {
       setIsSubmitting(false);
     }

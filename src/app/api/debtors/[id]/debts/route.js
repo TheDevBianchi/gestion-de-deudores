@@ -7,8 +7,15 @@ export async function POST(request, { params }) {
   try {
     await dbConnect();
     const { id } = params;
-    const { productos } = await request.json();
-
+    const debtData = await request.json();
+    
+    // Asegurarse de que tiene una fecha
+    if (!debtData.fecha) {
+      debtData.fecha = new Date();
+    }
+    
+    console.log("API recibiendo datos de deuda con fecha:", debtData.fecha);
+    
     const debtor = await Debtor.findById(id);
     if (!debtor) {
       return NextResponse.json(
@@ -21,7 +28,7 @@ export async function POST(request, { params }) {
     const debtProducts = [];
     let montoTotal = 0;
 
-    for (const item of productos) {
+    for (const item of debtData.productos) {
       const product = await Product.findById(item.productoId);
       if (!product) {
         return NextResponse.json(
@@ -55,13 +62,16 @@ export async function POST(request, { params }) {
     }
 
     // Crear nueva deuda
-    debtor.deudas.push({
+    const newDebt = {
+      ...debtData,
+      fecha: debtData.fecha,
+      estado: 'pendiente',
       productos: debtProducts,
       montoTotal,
-      montoPendiente: montoTotal,
-      estado: 'pendiente'
-    });
-
+      montoPendiente: montoTotal
+    };
+    
+    debtor.deudas.push(newDebt);
     await debtor.save();
     await debtor.populate('deudas.productos.producto');
 

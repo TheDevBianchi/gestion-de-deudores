@@ -179,26 +179,38 @@ export const useDebtors = () => {
 
   const addDebtToDebtor = useCallback(async (debtorId, debtData) => {
     try {
-      setLoading(true);
+      // Asegurarse de que tenga fecha
+      const dataWithDate = {
+        ...debtData,
+        fecha: debtData.fecha || new Date().toISOString()
+      };
+      
+      console.log("Agregando deuda con fecha:", dataWithDate.fecha);
+      
+      // Enviar a la API
       const response = await fetch(`/api/debtors/${debtorId}/debts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(debtData)
+        body: JSON.stringify(dataWithDate)
       });
       
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al agregar deuda');
+      }
       
-      setSelectedDebtor(data);
-      updateDebtor(data);
-      return data;
+      // Actualizar el estado con la respuesta
+      const updatedDebtor = await response.json();
+      
+      // Actualizar el deudor seleccionado
+      setSelectedDebtor(updatedDebtor);
+      
+      return updatedDebtor;
     } catch (error) {
-      setError(error.message);
+      console.error("Error en addDebtToDebtor:", error);
       throw error;
-    } finally {
-      setLoading(false);
     }
-  }, [setSelectedDebtor, updateDebtor, setError, setLoading]);
+  }, [setSelectedDebtor]);
 
   return {
     debtors: Array.isArray(debtors) ? debtors : [],

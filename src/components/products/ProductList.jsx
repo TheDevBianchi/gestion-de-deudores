@@ -161,7 +161,7 @@ const ProductList = memo(function ProductList() {
         <div className="border rounded-md">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow  className="bg-gray-100">
                 <TableHead>Nombre</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead className="text-right">Precio Compra</TableHead>
@@ -173,7 +173,7 @@ const ProductList = memo(function ProductList() {
             </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => (
-                <TableRow key={product._id}>
+                <TableRow key={product._id}  className="bg-white">
                   <TableCell className="font-medium">{product.nombre}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="whitespace-nowrap">

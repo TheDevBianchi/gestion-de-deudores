@@ -150,9 +150,20 @@ const DebtorSummary = memo(function DebtorSummary({ debtor }) {
 const DebtItem = memo(function DebtItem({ debt, debtorId, onAddPayment }) {
   const [isOpen, setIsOpen] = useState(false);
   
-  const formattedDate = debt.createdAt 
-    ? format(new Date(debt.createdAt), 'PPP', { locale: es })
-    : 'Fecha desconocida';
+  // Agregar log para depuración
+  console.log("Datos de deuda:", {
+    id: debt._id,
+    fecha: debt.fecha,
+    createdAt: debt.createdAt,
+    montoPendiente: debt.montoPendiente
+  });
+  
+  // Modificar para usar el campo fecha con prioridad
+  const formattedDate = debt.fecha 
+    ? format(new Date(debt.fecha), 'PPP', { locale: es })
+    : debt.createdAt 
+      ? format(new Date(debt.createdAt), 'PPP', { locale: es })
+      : 'Fecha desconocida';
   
   const dueDate = debt.fechaVencimiento
     ? format(new Date(debt.fechaVencimiento), 'PPP', { locale: es })
@@ -333,6 +344,35 @@ const DebtItem = memo(function DebtItem({ debt, debtorId, onAddPayment }) {
     </Card>
   );
 });
+
+// Asegurémonos de que la función formatDate en DebtorDetails también maneje correctamente los datos
+const formatDate = (debtData) => {
+  // Si se pasa un objeto completo, extraemos la fecha
+  const fechaPosible = typeof debtData === 'object' 
+    ? debtData.fecha || debtData.createdAt || debtData.date 
+    : debtData;
+  
+  if (!fechaPosible) return "Fecha desconocida";
+  
+  try {
+    const date = new Date(fechaPosible);
+    
+    // Verificar que la fecha sea válida
+    if (isNaN(date.getTime())) return "Fecha inválida";
+    
+    // Formato español: día/mes/año hora:minutos
+    return date.toLocaleString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    console.error("Error al formatear fecha:", error, "para el valor:", fechaPosible);
+    return "Error en formato";
+  }
+};
 
 const DebtList = memo(function DebtList({ debts = [], debtorId, onAddPayment }) {
   // Asegurarnos que debts sea siempre un array, incluso si es undefined

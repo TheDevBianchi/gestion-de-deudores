@@ -1,12 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useProducts } from '@/hooks/products/useProducts';
 import { useCategories } from '@/hooks/categories/useCategories';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { PlusIcon, Search } from 'lucide-react';
+import { 
+  PlusIcon, 
+  Search, 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronsLeft, 
+  ChevronsRight,
+  HelpCircle
+} from 'lucide-react';
 import ProductFormModal from '@/components/products/ProductFormModal';
 import {
   Select,
@@ -17,7 +25,44 @@ import {
 } from '@/components/ui/custom-select';
 import useDollarPrice from '@/hooks/dollar/useDollarPrice';
 import { toast } from 'sonner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
+// Definir constantes
+const PRODUCTS_PER_PAGE = 10;
+
+// Columnas con nombres abreviados y sus tooltips
+const tableColumns = [
+  { id: 'nombre', abbr: 'Nombre', full: 'Nombre del Producto' },
+  { id: 'costo', abbr: 'Costo', full: 'Precio de Compra' },
+  { id: 'precioVenta', abbr: 'P. Paq', full: 'Precio por Paquete' },
+  { id: 'precioUnitario', abbr: 'P. Unit', full: 'Precio Unitario' },
+  { id: 'precioBs', abbr: 'Precio en Bs', full: 'Precio en Bolívares con diferentes tasas' },
+  { id: 'categoria', abbr: 'Cat', full: 'Categoría' },
+  { id: 'stock', abbr: 'Stock', full: 'Unidades Disponibles' },
+  { id: 'estado', abbr: 'Estado', full: 'Estado del Producto' },
+  { id: 'acciones', abbr: 'Acciones', full: 'Acciones Disponibles' }
+];
+
+// Estilos optimizados para la tabla - Actualizados para fondos blancos
+const tableStyles = {
+  container: "w-full overflow-x-auto rounded-md border",
+  table: "w-full border-collapse min-w-full divide-y divide-gray-200 text-xs bg-white",
+  th: "px-1.5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-white",
+  td: "px-1.5 py-2 whitespace-nowrap border-t border-gray-100",
+  tdPrice: "text-xs font-medium",
+  badge: "inline-block px-1.5 py-0.5 text-xs font-medium rounded-full",
+  smallText: "text-[10px] text-muted-foreground",
+  paginationContainer: "flex items-center justify-between mt-4",
+  paginationInfo: "text-xs text-gray-500",
+  paginationControls: "flex items-center space-x-1"
+};
+
+// Componente principal - Página de Productos
 const ProductosPage = memo(function ProductosPage() {
   const { products, isLoading, error, fetchProducts, deleteProductById } = useProducts();
   const { categories, fetchCategories } = useCategories();
@@ -28,7 +73,10 @@ const ProductosPage = memo(function ProductosPage() {
   const [stockFilter, setStockFilter] = useState('todos');
   const [sortOrder, setSortOrder] = useState('nombre');
   
-  const { price: dollarPrice } = useDollarPrice();
+  // Estado para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  const { averagePrice, centralBankPrice, parallelPrice } = useDollarPrice();
   
   // Cargar productos y categorías al iniciar
   useEffect(() => {
@@ -36,84 +84,123 @@ const ProductosPage = memo(function ProductosPage() {
     fetchCategories();
   }, [fetchProducts, fetchCategories]);
   
-  // Filtrar productos
-  const filteredProducts = useCallback(() => {
-    if (!products || !products.length) return [];
+  // Función para obtener el nombre de la categoría
+  const getCategoryName = useCallback((categoryId) => {
+    if (!categoryId) return 'Sin categoría';
+    const category = categories.find(c => c._id === categoryId);
+    return category ? category.nombre : 'Sin categoría';
+  }, [categories]);
+  
+  // Filtrar y ordenar productos - Implementación de búsqueda global
+  const filteredProductsList = useMemo(() => {
+    if (!products) return [];
     
     return products.filter(product => {
-      // Filtro por búsqueda
-      const matchesSearch = !searchTerm || 
-        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
+      // Filtro de búsqueda
+      const searchMatch = searchTerm === '' || 
+        product.nombre.toLowerCase().includes(searchTerm.toLowerCase());
       
-      // Filtro por categoría
-      let matchesCategory = categoryFilter === 'todas';
-      if (categoryFilter === 'none') {
-        matchesCategory = !product.categoria || product.categoria === '';
-      } else if (categoryFilter !== 'todas') {
-        matchesCategory = product.categoria === categoryFilter;
-      }
+      // Filtro de categoría
+      const categoryMatch = 
+        categoryFilter === 'todas' || 
+        (categoryFilter === 'sin-categoria' && !product.categoria) ||
+        product.categoria === categoryFilter;
       
-      // Filtro por stock
-      let matchesStock = stockFilter === 'todos';
-      if (stockFilter === 'disponibles') {
-        matchesStock = product.cantidadInventario > 0;
-      } else if (stockFilter === 'agotados') {
-        matchesStock = product.cantidadInventario <= 0;
-      }
-      
-      return matchesSearch && matchesCategory && matchesStock;
+      // Filtro de stock
+      const stockMatch = 
+        stockFilter === 'todos' || 
+        (stockFilter === 'disponible' && product.cantidadInventario > 0) ||
+        (stockFilter === 'agotado' && product.cantidadInventario <= 0);
+        
+      return searchMatch && categoryMatch && stockMatch;
     }).sort((a, b) => {
       // Ordenamiento
-      if (sortOrder === 'nombre') return a.nombre.localeCompare(b.nombre);
-      if (sortOrder === 'precio') return a.precioVenta - b.precioVenta;
-      if (sortOrder === 'stock') return b.cantidadInventario - a.cantidadInventario;
+      if (sortOrder === 'nombre') {
+        return a.nombre.localeCompare(b.nombre);
+      } else if (sortOrder === 'precio-asc') {
+        return a.precioVenta - b.precioVenta;
+      } else if (sortOrder === 'precio-desc') {
+        return b.precioVenta - a.precioVenta;
+      } else if (sortOrder === 'stock-asc') {
+        return a.cantidadInventario - b.cantidadInventario;
+      } else if (sortOrder === 'stock-desc') {
+        return b.cantidadInventario - a.cantidadInventario;
+      }
       return 0;
     });
   }, [products, searchTerm, categoryFilter, stockFilter, sortOrder]);
   
-  // Calcular estadísticas
-  const stats = useCallback(() => {
+  // Calcular el número total de páginas
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredProductsList.length / PRODUCTS_PER_PAGE);
+  }, [filteredProductsList]);
+  
+  // Obtener productos para la página actual
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProductsList.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  }, [filteredProductsList, currentPage]);
+  
+  // Ajustar página actual cuando cambian los filtros o el total de páginas
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+  
+  // Funciones de navegación de páginas
+  const goToPage = useCallback((page) => {
+    setCurrentPage(page);
+  }, []);
+  
+  const goToFirstPage = useCallback(() => {
+    setCurrentPage(1);
+  }, []);
+  
+  const goToLastPage = useCallback(() => {
+    setCurrentPage(totalPages);
+  }, [totalPages]);
+  
+  const goToPrevPage = useCallback(() => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+    }
+  }, [currentPage]);
+  
+  const goToNextPage = useCallback(() => {
+    if (currentPage < totalPages) {
+      setCurrentPage(prev => prev + 1);
+    }
+  }, [currentPage, totalPages]);
+  
+  // Stats de inventario
+  const stats = useMemo(() => {
     if (!products) return { 
       total: 0, 
       lowStock: 0, 
       outOfStock: 0, 
-      value: 0, 
-      dollarValue: 0,
-      totalProfit: 0
+      value: 0
     };
     
     return products.reduce((acc, product) => {
+      // Stats básicos
       acc.total += 1;
       if (product.cantidadInventario <= 0) acc.outOfStock += 1;
       else if (product.cantidadInventario < 5) acc.lowStock += 1;
       
-      const precioCompra = product.precioCompra || 0;
-      const precioVenta = product.precioVenta || (precioCompra * (1 + (product.porcentajeGanancia || 0) / 100));
+      // Valor total
+      const precioVenta = product.precioVenta || 0;
       const inventory = product.cantidadInventario || 0;
-      
-      // Valor total del inventario (precio de venta x cantidad)
-      const productValue = precioVenta * inventory;
-      acc.value += productValue;
-      
-      // Valor en dólares
-      acc.dollarValue += productValue / dollarPrice;
-      
-      // Cálculo de la ganancia total
-      const costo = precioCompra * inventory;
-      const ganancia = productValue - costo;
-      acc.totalProfit += ganancia;
+      acc.value += precioVenta * inventory;
       
       return acc;
     }, { 
       total: 0, 
       lowStock: 0, 
       outOfStock: 0, 
-      value: 0, 
-      dollarValue: 0,
-      totalProfit: 0 
+      value: 0 
     });
-  }, [products, dollarPrice]);
+  }, [products]);
   
   // Funciones de manejo
   const handleAddProduct = useCallback(() => {
@@ -137,88 +224,141 @@ const ProductosPage = memo(function ProductosPage() {
     }
   }, [deleteProductById]);
   
-  const handleFormSuccess = useCallback(() => {
-    setShowModal(false);
-    setEditingProduct(null);
-    fetchProducts();
-  }, [fetchProducts]);
-  
-  // Obtener estadísticas calculadas
-  const statsData = stats();
-  const filteredProductsList = filteredProducts();
-  
-  // Obtener nombre de categoría
-  const getCategoryName = useCallback((categoryId) => {
-    if (!categoryId) return 'Sin categoría';
+  // Función para renderizar controles de paginación
+  const renderPagination = () => {
+    // No mostrar paginación si hay muy pocos productos
+    if (filteredProductsList.length <= PRODUCTS_PER_PAGE) return null;
     
-    const category = categories.find(cat => cat._id === categoryId);
-    return category ? category.nombre : 'Categoría desconocida';
-  }, [categories]);
-  
+    const pageNumbers = [];
+    // Determinar qué números de página mostrar
+    const totalPageButtons = 5; // Ajustar según sea necesario
+    let startPage = Math.max(1, currentPage - Math.floor(totalPageButtons / 2));
+    const endPage = Math.min(totalPages, startPage + totalPageButtons - 1);
+    
+    if (endPage - startPage + 1 < totalPageButtons) {
+      startPage = Math.max(1, endPage - totalPageButtons + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+    
     return (
-    <div className="container py-6">
-      <h1 className="text-3xl font-bold mb-6">Gestión de Productos</h1>
-      
-      {/* Tarjetas de estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <Card className="p-4">
-          <h3 className="text-sm text-muted-foreground">Total Productos</h3>
-          <p className="text-3xl font-bold">{statsData.total}</p>
-        </Card>
-        
-        <Card className="p-4">
-          <h3 className="text-sm text-muted-foreground">Bajo Stock</h3>
-          <p className="text-3xl font-bold text-orange-500">{statsData.lowStock}</p>
-        </Card>
-        
-        <Card className="p-4">
-          <h3 className="text-sm text-muted-foreground">Agotados</h3>
-          <p className="text-3xl font-bold text-red-500">{statsData.outOfStock}</p>
-        </Card>
-        
-        <Card className="p-4">
-          <h3 className="text-sm text-muted-foreground">Valor Total en USD</h3>
-          <p className="text-3xl font-bold">${statsData.value.toFixed(2)}</p>
-        </Card>
-        
-        <Card className="p-4">
-          <h3 className="text-sm text-muted-foreground">Ganancia Total</h3>
-          <p className="text-3xl font-bold text-green-600">${statsData.totalProfit.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">Basado en % de ganancia</p>
-        </Card>
-      </div>
-      
-      {/* Barra de búsqueda y botón de añadir */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6 items-center">
-        <div className="relative w-full md:w-auto md:flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar productos..."
-            className="pl-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className={tableStyles.paginationContainer}>
+        <div className={tableStyles.paginationInfo}>
+          Mostrando {((currentPage - 1) * PRODUCTS_PER_PAGE) + 1} - {Math.min(currentPage * PRODUCTS_PER_PAGE, filteredProductsList.length)} de {filteredProductsList.length} productos
         </div>
         
-        <Button onClick={handleAddProduct} className="w-full md:w-auto">
+        <div className={tableStyles.paginationControls}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToFirstPage} 
+            disabled={currentPage === 1}
+            className="h-7 w-7 p-0 bg-white"
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToPrevPage} 
+            disabled={currentPage === 1}
+            className="h-7 w-7 p-0 bg-white"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          
+          {pageNumbers.map(number => (
+            <Button
+              key={number}
+              variant={currentPage === number ? "default" : "outline"}
+              size="sm"
+              onClick={() => goToPage(number)}
+              className={`h-7 w-7 p-0 ${currentPage !== number ? "bg-white" : ""}`}
+            >
+              {number}
+            </Button>
+          ))}
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToNextPage} 
+            disabled={currentPage === totalPages}
+            className="h-7 w-7 p-0 bg-white"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToLastPage} 
+            disabled={currentPage === totalPages}
+            className="h-7 w-7 p-0 bg-white"
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Inventario</h1>
+        <Button onClick={handleAddProduct}>
           <PlusIcon className="mr-2 h-4 w-4" />
           Nuevo Producto
         </Button>
       </div>
       
+      {/* Cards de estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Total Productos</div>
+          <div className="text-2xl font-bold">{stats.total}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Bajo Stock (&lt;5)</div>
+          <div className="text-2xl font-bold text-amber-500">{stats.lowStock}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Agotados</div>
+          <div className="text-2xl font-bold text-red-500">{stats.outOfStock}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Valor en Inventario</div>
+          <div className="text-2xl font-bold">${stats.value.toFixed(2)}</div>
+        </Card>
+      </div>
+      
       {/* Filtros */}
-      <Card className="mb-6 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <Input
+            placeholder="Buscar productos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full"
+            prefix={<Search className="h-4 w-4 text-muted-foreground" />}
+          />
+        </div>
+        
+        <div>
           <Select
             value={categoryFilter}
             onValueChange={setCategoryFilter}
           >
-            <SelectTrigger className="w-full md:w-auto">
-              <SelectValue placeholder="Todas las categorías" />
+            <SelectTrigger>
+              <SelectValue placeholder="Categoría" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas las categorías</SelectItem>
-              <SelectItem value="none">Sin categoría</SelectItem>
+              <SelectItem value="sin-categoria">Sin categoría</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category._id} value={category._id}>
                   {category.nombre}
@@ -226,115 +366,199 @@ const ProductosPage = memo(function ProductosPage() {
               ))}
             </SelectContent>
           </Select>
-          
+        </div>
+        
+        <div>
           <Select
             value={stockFilter}
             onValueChange={setStockFilter}
           >
-            <SelectTrigger className="w-full md:w-auto">
-              <SelectValue placeholder="Todos los productos" />
+            <SelectTrigger>
+              <SelectValue placeholder="Estado de stock" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos los productos</SelectItem>
-              <SelectItem value="disponibles">En stock</SelectItem>
-              <SelectItem value="agotados">Agotados</SelectItem>
+              <SelectItem value="disponible">Disponibles</SelectItem>
+              <SelectItem value="agotado">Agotados</SelectItem>
             </SelectContent>
           </Select>
-          
+        </div>
+        
+        <div>
           <Select
             value={sortOrder}
             onValueChange={setSortOrder}
           >
-            <SelectTrigger className="w-full md:w-auto">
-              <SelectValue placeholder="Nombre (A-Z)" />
+            <SelectTrigger>
+              <SelectValue placeholder="Ordenar por" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="nombre">Nombre (A-Z)</SelectItem>
-              <SelectItem value="precio">Precio (menor a mayor)</SelectItem>
-              <SelectItem value="stock">Stock (mayor a menor)</SelectItem>
+              <SelectItem value="precio-asc">Precio: menor a mayor</SelectItem>
+              <SelectItem value="precio-desc">Precio: mayor a menor</SelectItem>
+              <SelectItem value="stock-asc">Stock: menor a mayor</SelectItem>
+              <SelectItem value="stock-desc">Stock: mayor a menor</SelectItem>
             </SelectContent>
           </Select>
         </div>
-      </Card>
+      </div>
       
       {/* Tabla de productos */}
-      <div className="border rounded-md">
-        <table className="w-full bg-white rounded-md">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-3">Nombre</th>
-              <th className="text-left p-3">Costo</th>
-              <th className="text-left p-3">Precio de venta</th>
-              <th className="text-left p-3">Categoría</th>
-              <th className="text-center p-3">Stock</th>
-              <th className="text-center p-3">Estado</th>
-              <th className="text-right p-3">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
+      <TooltipProvider>
+        <div className={tableStyles.container}>
+          <table className={tableStyles.table}>
+            <thead>
               <tr>
-                <td colSpan="7" className="text-center p-4">Cargando productos...</td>
+                {tableColumns.map(column => (
+                  <th key={column.id} className={tableStyles.th}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center">
+                          {column.abbr}
+                          <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{column.full}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </th>
+                ))}
               </tr>
-            ) : filteredProductsList.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="text-center p-4">No hay productos que coincidan con los filtros.</td>
-              </tr>
-            ) : (
-              filteredProductsList.map((product) => (
-                <tr key={product._id} className="border-b">
-                  <td className="p-3">{product.nombre}</td>
-                  <td className="p-3">
-                    <div>${product.precioCompra?.toFixed(2) || "0.00"}</div>
-                  </td>
-                  <td className="p-3">
-                    <div>${product.precioVenta?.toFixed(2) || "0.00"}</div>
-                    <div className="text-sm text-muted-foreground">Bs. {((product.precioVenta || 0) * dollarPrice).toFixed(2)}</div>
-                  </td>
-                  <td className="p-3">
-                    <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                      {getCategoryName(product.categoria)}
-                    </span>
-                  </td>
-                  <td className="text-center p-3">{product.cantidadInventario}</td>
-                  <td className="text-center p-3">
-                    {product.cantidadInventario > 0 ? (
-                      <span className="inline-block px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                        Disponible
-                      </span>
-                    ) : (
-                      <span className="inline-block px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
-                        Agotado
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-right p-3">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)}>
-                        Editar
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product._id)}>
-                        Eliminar
-        </Button>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={tableColumns.length} className="p-4 text-center">
+                    Cargando productos...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : paginatedProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={tableColumns.length} className="p-4 text-center">
+                    No se encontraron productos que coincidan con los filtros.
+                  </td>
+                </tr>
+              ) : (
+                paginatedProducts.map((product) => (
+                  <tr key={product._id} className="hover:bg-gray-50">
+                    <td className={tableStyles.td}>{product.nombre}</td>
+                    <td className={tableStyles.td}>
+                      <div className={tableStyles.tdPrice}>${product.precioCompra?.toFixed(2) || "0.00"}</div>
+                    </td>
+                    <td className={tableStyles.td}>
+                      <div className={tableStyles.tdPrice}>${product.precioVenta?.toFixed(2) || "0.00"}</div>
+                    </td>
+                    <td className={tableStyles.td}>
+                      <div className={tableStyles.tdPrice}>${product.precioUnitario?.toFixed(2) || "0.00"}</div>
+                    </td>
+                    {/* Columna combinada de precios en bolívares */}
+                    <td className={tableStyles.td}>
+                      <div className="space-y-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center">
+                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * averagePrice).toFixed(2)}</div>
+                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>Precio con Tasa Promedio</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center">
+                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * centralBankPrice).toFixed(2)}</div>
+                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>Precio con Tasa BCV</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center">
+                                <div className={tableStyles.tdPrice}>Bs. {((product.precioVenta || 0) * parallelPrice).toFixed(2)}</div>
+                                <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>Precio con Tasa Paralelo</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </td>
+                    <td className={tableStyles.td}>
+                      <span className={`${tableStyles.badge} bg-blue-100 text-blue-800`}>
+                        {getCategoryName(product.categoria)}
+                      </span>
+                    </td>
+                    <td className={`${tableStyles.td} text-center`}>{product.cantidadInventario}</td>
+                    <td className={tableStyles.td}>
+                      {product.cantidadInventario > 0 ? (
+                        <span className={`${tableStyles.badge} bg-green-100 text-green-800`}>
+                          Disp
+                        </span>
+                      ) : (
+                        <span className={`${tableStyles.badge} bg-red-100 text-red-800`}>
+                          Agot
+                        </span>
+                      )}
+                    </td>
+                    <td className={tableStyles.td}>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-1.5 text-xs"
+                          onClick={() => handleEditProduct(product)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-6 px-1.5 text-xs"
+                          onClick={() => handleDeleteProduct(product._id)}
+                        >
+                          Elim
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </TooltipProvider>
       
-      {/* Modal para crear/editar productos */}
-      <div className='mt-4'>
+      {/* Controles de paginación */}
+      {renderPagination()}
+      
+      {/* Modal de producto */}
+      {showModal && (
         <ProductFormModal
+          product={editingProduct}
           isOpen={showModal}
           onClose={() => setShowModal(false)}
-          product={editingProduct}
-          onSuccess={handleFormSuccess}
+          onSuccess={() => {
+            setShowModal(false);
+            fetchProducts();
+          }}
         />
-      </div>
-      </div>
+      )}
+    </div>
   );
 });
 

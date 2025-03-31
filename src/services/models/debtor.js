@@ -28,8 +28,13 @@ const deudaSchema = new mongoose.Schema({
   fecha: {
     type: Date,
     default: Date.now
+  },
+  tasaDolar: {
+    promedio: Number,
+    bancoCentral: Number,
+    paralelo: Number
   }
-}, { _id: true });
+}, { _id: true }, { timestamps: true });
 
 const debtorSchema = new mongoose.Schema({
   nombre: {

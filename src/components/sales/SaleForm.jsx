@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -186,7 +186,7 @@ function SaleForm({ onSuccess, onCreditSale }) {
   const { products } = useProducts();
   const { debtors = [], fetchDebtors, addDebtor } = useDebtors();
   const { createSale } = useSales();
-  const { price: dollarPrice } = useDollarPrice();
+  const { averagePrice, centralBankPrice, parallelPrice } = useDollarPrice();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDebtorModal, setShowDebtorModal] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -196,6 +196,7 @@ function SaleForm({ onSuccess, onCreditSale }) {
   const { 
     total, 
     totalBsF, 
+    items,
     clearItems, 
     removeItem, 
     updateItem, 
@@ -206,8 +207,18 @@ function SaleForm({ onSuccess, onCreditSale }) {
 
   // Actualizar precio del dólar en el store
   useEffect(() => {
-    setStoreDollarPrice(dollarPrice);
-  }, [dollarPrice, setStoreDollarPrice]);
+    setStoreDollarPrice(averagePrice);
+  }, [averagePrice, setStoreDollarPrice]);
+
+  // Calcular totales en bolívares según las diferentes tasas
+  const totalesEnBolivares = useMemo(() => {
+    const totalUSD = parseFloat(total) || 0;
+    return {
+      promedio: (totalUSD * averagePrice).toFixed(2),
+      bancoCentral: (totalUSD * centralBankPrice).toFixed(2),
+      paralelo: (totalUSD * parallelPrice).toFixed(2)
+    };
+  }, [total, averagePrice, centralBankPrice, parallelPrice]);
 
   // Cargar deudores al montar el componente
   useEffect(() => {
@@ -407,6 +418,41 @@ function SaleForm({ onSuccess, onCreditSale }) {
   const formattedTotal = typeof total === 'string' ? total : total.toFixed(2);
   const formattedTotalBsF = typeof totalBsF === 'string' ? totalBsF : totalBsF.toFixed(2);
 
+  // Renderizado de la sección de precios
+  const renderPriceSection = () => {
+    if (items.length === 0) return null;
+    
+    return (
+      <div className="mt-6 rounded-lg border bg-white p-4">
+        <h3 className="text-lg font-medium mb-3">Resumen de Precios</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h4 className="text-sm font-medium text-gray-500 mb-2">Precio en Dólares</h4>
+            <p className="text-2xl font-bold">${total}</p>
+          </div>
+          
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-500">Precio en Bolívares</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Tasa Promedio:</span>
+                <span className="font-medium">Bs. {totalesEnBolivares.promedio}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Tasa BCV:</span>
+                <span className="font-medium">Bs. {totalesEnBolivares.bancoCentral}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm">Tasa Paralelo:</span>
+                <span className="font-medium">Bs. {totalesEnBolivares.paralelo}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Paso 1: Selección de productos */}
@@ -453,7 +499,7 @@ function SaleForm({ onSuccess, onCreditSale }) {
                     disabled={isSubmitting}
                     errors={errors}
                     watch={watch}
-                    dollarPrice={dollarPrice || 0}
+                    dollarPrice={averagePrice || 0}
                   />
                 );
               })}
@@ -584,9 +630,13 @@ function SaleForm({ onSuccess, onCreditSale }) {
           Finalizar Venta
         </h2>
         
+
+      {/* Nueva sección de resumen de precios */}
+      {renderPriceSection()}
+
         <Button 
           type="submit" 
-          className="w-full py-6 text-lg"
+          className="w-full py-6 text-lg mt-4"
           disabled={
             fields.length === 0 || 
             isSubmitting || 
@@ -596,7 +646,7 @@ function SaleForm({ onSuccess, onCreditSale }) {
           {isSubmitting ? (
             <>Procesando venta...</>
           ) : (
-            <>Completar Venta (${formattedTotal} / Bs. {formattedTotalBsF})</>
+            <>Completar Venta</>
           )}
         </Button>
         
