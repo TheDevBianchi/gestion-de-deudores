@@ -39,8 +39,8 @@ const PRODUCTS_PER_PAGE = 10;
 const tableColumns = [
   { id: 'nombre', abbr: 'Nombre', full: 'Nombre del Producto' },
   { id: 'costo', abbr: 'Costo', full: 'Precio de Compra' },
-  { id: 'precioVenta', abbr: 'P. Paq', full: 'Precio por Paquete' },
-  { id: 'precioUnitario', abbr: 'P. Unit', full: 'Precio Unitario' },
+  { id: 'precio', abbr: 'Precio', full: 'Precio Unitario en Dólares' },
+  { id: 'precioPorUnidad', abbr: 'Precio por Unidad', full: 'Precio en Bolívares' },
   { id: 'categoria', abbr: 'Cat', full: 'Categoría' },
   { id: 'stock', abbr: 'Stock', full: 'Unidades Disponibles' },
   { id: 'estado', abbr: 'Estado', full: 'Estado del Producto' },
@@ -452,61 +452,49 @@ const ProductosPage = memo(function ProductosPage() {
                       <div className={tableStyles.tdPrice}>${product.precioCompra?.toFixed(2) || "0.00"}</div>
                     </td>
                     <td className={tableStyles.td}>
-                      <div className="flex flex-col">
-                        <div className={tableStyles.tdPrice}>${product.precioVenta?.toFixed(2) || "0.00"}</div>
-                        <div className="mt-1">
+                      <div className={tableStyles.tdPrice}>${product.precioUnitario?.toFixed(2) || "0.00"}</div>
+                    </td>
+                    <td className={tableStyles.td}>
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center">
+                          <span className="mr-1">Bs. {((product.precioUnitario || 0) * parallelPrice).toFixed(2)}</span>
                           <TooltipProvider>
                             <Tooltip>
-                              <TooltipTrigger className="text-xs text-blue-500 cursor-help flex items-center">
-                                <span>Ver en Bs.</span>
-                                <HelpCircle className="ml-1 h-3 w-3" />
+                              <TooltipTrigger>
+                                <HelpCircle className="h-3 w-3 text-muted-foreground" />
                               </TooltipTrigger>
-                              <TooltipContent side="right" className="w-60">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between">
-                                    <span>BCV:</span>
-                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * centralBankPrice).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Promedio:</span>
-                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * averagePrice).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Paralelo:</span>
-                                    <span className="font-medium">Bs. {((product.precioVenta || 0) * parallelPrice).toFixed(2)}</span>
-                                  </div>
-                                </div>
+                              <TooltipContent>
+                                <p>Tasa Paralelo</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </div>
-                      </div>
-                    </td>
-                    <td className={tableStyles.td}>
-                      <div className="flex flex-col">
-                        <div className={tableStyles.tdPrice}>${product.precioUnitario?.toFixed(2) || "0.00"}</div>
-                        <div className="mt-1">
+                        
+                        <div className="flex items-center">
+                          <span className="mr-1">BCV:</span>
+                          <span className="mr-1">Bs. {((product.precioUnitario || 0) * centralBankPrice).toFixed(2)}</span>
                           <TooltipProvider>
                             <Tooltip>
-                              <TooltipTrigger className="text-xs text-blue-500 cursor-help flex items-center">
-                                <span>Ver en Bs.</span>
-                                <HelpCircle className="ml-1 h-3 w-3" />
+                              <TooltipTrigger>
+                                <HelpCircle className="h-3 w-3 text-muted-foreground" />
                               </TooltipTrigger>
-                              <TooltipContent side="right" className="w-60">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between">
-                                    <span>BCV:</span>
-                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * centralBankPrice).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Promedio:</span>
-                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * averagePrice).toFixed(2)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span>Paralelo:</span>
-                                    <span className="font-medium">Bs. {((product.precioUnitario || 0) * parallelPrice).toFixed(2)}</span>
-                                  </div>
-                                </div>
+                              <TooltipContent>
+                                <p>Tasa Banco Central de Venezuela</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        
+                        <div className="flex items-center">
+                          <span className="mr-1">Promedio:</span>
+                          <span className="mr-1">Bs. {((product.precioUnitario || 0) * averagePrice).toFixed(2)}</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Tasa Promedio</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -522,11 +510,11 @@ const ProductosPage = memo(function ProductosPage() {
                     <td className={tableStyles.td}>
                     {product.cantidadInventario > 0 ? (
                         <span className={`${tableStyles.badge} bg-green-100 text-green-800`}>
-                          Disp
+                          Disponible
                       </span>
                     ) : (
                         <span className={`${tableStyles.badge} bg-red-100 text-red-800`}>
-                          Agot
+                          Agotado
                       </span>
                     )}
                   </td>
@@ -538,7 +526,7 @@ const ProductosPage = memo(function ProductosPage() {
                           className="h-6 px-1.5 text-xs"
                           onClick={() => handleEditProduct(product)}
                         >
-                          Edit
+                          Editar
                       </Button>
                         <Button
                           variant="destructive"
@@ -546,9 +534,9 @@ const ProductosPage = memo(function ProductosPage() {
                           className="h-6 px-1.5 text-xs"
                           onClick={() => handleDeleteProduct(product._id)}
                         >
-                          Elim
-        </Button>
-      </div>
+                          Eliminar
+                        </Button>
+                      </div>
                   </td>
                 </tr>
               ))
