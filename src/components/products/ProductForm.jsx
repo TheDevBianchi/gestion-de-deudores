@@ -28,6 +28,8 @@ import { useProducts } from '@/hooks/products/useProducts';
 import { useCategories } from '@/hooks/categories/useCategories';
 import { useDollarPrice } from '@/hooks/dollar/useDollarPrice';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { HelpCircle } from 'lucide-react';
 
 // Esquema para validar el formulario
 const productSchema = z.object({
@@ -50,7 +52,7 @@ const ProductForm = memo(function ProductForm({ product, onSuccess, onClose }) {
   
   const { createProduct, updateProduct } = useProducts();
   const { categories, fetchCategories } = useCategories();
-  const { price: dollarPrice } = useDollarPrice();
+  const { averagePrice, centralBankPrice, parallelPrice } = useDollarPrice();
   
   // Cargar categorías al montar el componente
   useEffect(() => {
@@ -105,9 +107,18 @@ const ProductForm = memo(function ProductForm({ product, onSuccess, onClose }) {
     }
   };
 
-  // Calcular precio unitario y precio en BsF
+  // Estados para los precios calculados
   const [precioUnitario, setPrecioUnitario] = useState('0.00');
-  const [precioBsF, setPrecioBsF] = useState('0.00');
+  const [precioBsF, setPrecioBsF] = useState({
+    promedio: '0.00',
+    bancoCentral: '0.00',
+    paralelo: '0.00'
+  });
+  const [precioUnitarioBsF, setPrecioUnitarioBsF] = useState({
+    promedio: '0.00',
+    bancoCentral: '0.00',
+    paralelo: '0.00'
+  });
   
   // Actualizar precios calculados cuando cambian los valores relevantes
   useEffect(() => {
@@ -115,24 +126,41 @@ const ProductForm = memo(function ProductForm({ product, onSuccess, onClose }) {
     const porcentajeGanancia = parseFloat(form.watch('porcentajeGanancia')) || 0;
     const cantidadPorPaquete = parseInt(form.watch('cantidadPorPaquete')) || 1;
     
-    // Calcular precio unitario incluyendo el porcentaje de ganancia
-    if (cantidadPorPaquete > 0) {
-      const precioConGanancia = precioCompra * (1 + porcentajeGanancia / 100);
-      const unitario = (precioConGanancia / cantidadPorPaquete).toFixed(2);
-      setPrecioUnitario(unitario);
-    } else {
-      setPrecioUnitario('0.00');
-    }
-    
-    // Calcular precio de venta
+    // Calcular precio de venta por paquete
     const precioVenta = precioCompra * (1 + porcentajeGanancia / 100);
     form.setValue('precioVenta', precioVenta.toFixed(2), { shouldValidate: true });
     
-    // Calcular precio en BsF usando la tasa dinámica
-    if (dollarPrice) {
-      setPrecioBsF((precioVenta * dollarPrice).toFixed(2));
+    // Calcular precio unitario
+    let unitario = "0.00";
+    if (cantidadPorPaquete > 0) {
+      unitario = (precioVenta / cantidadPorPaquete).toFixed(2);
     }
-  }, [form, form.watch('precioCompra'), form.watch('porcentajeGanancia'), form.watch('cantidadPorPaquete'), dollarPrice]);
+    setPrecioUnitario(unitario);
+    
+    // Importante: convertir el string a número para los cálculos
+    const precioUnitarioNum = parseFloat(unitario);
+    
+    // Calcular precios en bolívares usando las diferentes tasas
+    const preciosBolivares = {
+      promedio: (precioVenta * averagePrice).toFixed(2),
+      bancoCentral: (precioVenta * centralBankPrice).toFixed(2),
+      paralelo: (precioVenta * parallelPrice).toFixed(2)
+    };
+    
+    // Calcular precios unitarios en bolívares asegurándonos de usar el valor numérico
+    const preciosUnitariosBolivares = {
+      promedio: (precioUnitarioNum * averagePrice).toFixed(2),
+      bancoCentral: (precioUnitarioNum * centralBankPrice).toFixed(2),
+      paralelo: (precioUnitarioNum * parallelPrice).toFixed(2)
+    };
+    
+    console.log("Precio unitario en USD:", precioUnitarioNum);
+    console.log("Precio unitario en Bs. (Promedio):", preciosUnitariosBolivares.promedio);
+    
+    setPrecioBsF(preciosBolivares);
+    setPrecioUnitarioBsF(preciosUnitariosBolivares);
+    
+  }, [form, form.watch('precioCompra'), form.watch('porcentajeGanancia'), form.watch('cantidadPorPaquete'), averagePrice, centralBankPrice, parallelPrice]);
 
   return (
     <Form {...form}>
@@ -348,20 +376,122 @@ const ProductForm = memo(function ProductForm({ product, onSuccess, onClose }) {
         </div>
         
         <div className="bg-muted/30 p-4 border rounded-md mb-6">
-          <div className="grid grid-cols-2 gap-4">
+          <h3 className="text-lg font-medium mb-3">Resumen de Precios</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Precio por Paquete ($):</label>
+                <p className="text-xl font-bold">${form.watch('precioVenta') || "0.00"}</p>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio por Paquete en Bolívares:</label>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa Promedio:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioBsF.promedio}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa promedio: {averagePrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa BCV:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioBsF.bancoCentral}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa del BCV: {centralBankPrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa Paralelo:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioBsF.paralelo}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa paralela: {parallelPrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Precio Unitario:</label>
+                <label className="text-sm font-medium">Precio Unitario ($):</label>
               <p className="text-xl font-bold">${precioUnitario}</p>
               <p className="text-xs text-muted-foreground">
                 Precio por unidad individual
               </p>
             </div>
-            <div>
-              <label className="text-sm font-medium">Precio Unitario en Bs.F:</label>
-              <p className="text-xl font-bold">Bs. {(parseFloat(precioUnitario) * dollarPrice).toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground">
-                Tasa: {dollarPrice?.toFixed(2) || 0} Bs.F/USD
-              </p>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Unitario en Bolívares:</label>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa Promedio:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioUnitarioBsF.promedio}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa promedio: {averagePrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa BCV:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioUnitarioBsF.bancoCentral}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa del BCV: {centralBankPrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Tasa Paralelo:</span>
+                    <Tooltip>
+                      <TooltipTrigger className="flex items-center">
+                        <span className="font-medium">Bs. {precioUnitarioBsF.paralelo}</span>
+                        <HelpCircle className="ml-1 h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Calculado con la tasa paralela: {parallelPrice} Bs/$</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              </div>
             </div>
           </div>
         </div>

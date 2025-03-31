@@ -179,7 +179,8 @@ const ProductosPage = memo(function ProductosPage() {
       total: 0, 
       lowStock: 0, 
       outOfStock: 0, 
-      value: 0
+      value: 0,
+      totalGanancia: 0
     };
     
     return products.reduce((acc, product) => {
@@ -192,13 +193,14 @@ const ProductosPage = memo(function ProductosPage() {
       const precioVenta = product.precioVenta || 0;
       const inventory = product.cantidadInventario || 0;
       acc.value += precioVenta * inventory;
-      
+      acc.totalGanancia += (precioVenta * inventory) - (product.precioCompra * inventory);
       return acc;
     }, { 
       total: 0, 
       lowStock: 0, 
       outOfStock: 0, 
-      value: 0 
+      value: 0,
+      totalGanancia: 0
     });
   }, [products]);
   
@@ -242,7 +244,7 @@ const ProductosPage = memo(function ProductosPage() {
     for (let i = startPage; i <= endPage; i++) {
       pageNumbers.push(i);
     }
-    
+  
     return (
       <div className={tableStyles.paginationContainer}>
         <div className={tableStyles.paginationInfo}>
@@ -317,7 +319,7 @@ const ProductosPage = memo(function ProductosPage() {
       </div>
       
       {/* Cards de estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="p-4">
           <div className="text-sm text-muted-foreground">Total Productos</div>
           <div className="text-2xl font-bold">{stats.total}</div>
@@ -333,6 +335,10 @@ const ProductosPage = memo(function ProductosPage() {
         <Card className="p-4">
           <div className="text-sm text-muted-foreground">Valor en Inventario</div>
           <div className="text-2xl font-bold">${stats.value.toFixed(2)}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Ganancia Total</div>
+          <div className="text-2xl font-bold text-green-500">${stats.totalGanancia.toFixed(2)}</div>
         </Card>
       </div>
       
@@ -367,7 +373,7 @@ const ProductosPage = memo(function ProductosPage() {
             </SelectContent>
           </Select>
         </div>
-        
+          
         <div>
           <Select
             value={stockFilter}
@@ -383,7 +389,7 @@ const ProductosPage = memo(function ProductosPage() {
             </SelectContent>
           </Select>
         </div>
-        
+          
         <div>
           <Select
             value={sortOrder}
@@ -407,7 +413,7 @@ const ProductosPage = memo(function ProductosPage() {
       <TooltipProvider>
         <div className={tableStyles.container}>
           <table className={tableStyles.table}>
-            <thead>
+          <thead>
               <tr>
                 {tableColumns.map(column => (
                   <th key={column.id} className={tableStyles.th}>
@@ -500,21 +506,21 @@ const ProductosPage = memo(function ProductosPage() {
                     </td>
                     <td className={tableStyles.td}>
                       <span className={`${tableStyles.badge} bg-blue-100 text-blue-800`}>
-                        {getCategoryName(product.categoria)}
-                      </span>
-                    </td>
+                      {getCategoryName(product.categoria)}
+                    </span>
+                  </td>
                     <td className={`${tableStyles.td} text-center`}>{product.cantidadInventario}</td>
                     <td className={tableStyles.td}>
-                      {product.cantidadInventario > 0 ? (
+                    {product.cantidadInventario > 0 ? (
                         <span className={`${tableStyles.badge} bg-green-100 text-green-800`}>
                           Disp
-                        </span>
-                      ) : (
+                      </span>
+                    ) : (
                         <span className={`${tableStyles.badge} bg-red-100 text-red-800`}>
                           Agot
-                        </span>
-                      )}
-                    </td>
+                      </span>
+                    )}
+                  </td>
                     <td className={tableStyles.td}>
                       <div className="flex space-x-1">
                         <Button
@@ -524,7 +530,7 @@ const ProductosPage = memo(function ProductosPage() {
                           onClick={() => handleEditProduct(product)}
                         >
                           Edit
-                        </Button>
+                      </Button>
                         <Button
                           variant="destructive"
                           size="sm"
@@ -532,15 +538,15 @@ const ProductosPage = memo(function ProductosPage() {
                           onClick={() => handleDeleteProduct(product._id)}
                         >
                           Elim
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        </Button>
+      </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
       </TooltipProvider>
       
       {/* Controles de paginación */}
@@ -558,7 +564,7 @@ const ProductosPage = memo(function ProductosPage() {
           }}
         />
       )}
-    </div>
+      </div>
   );
 });
 

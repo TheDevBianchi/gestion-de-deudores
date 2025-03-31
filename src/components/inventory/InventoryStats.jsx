@@ -12,7 +12,8 @@ const InventoryStats = () => {
       totalProducts: products.length,
       lowStock: products.filter(p => p.cantidadInventario < 5).length,
       outOfStock: products.filter(p => p.cantidadInventario === 0).length,
-      totalValue: products.reduce((acc, p) => acc + (p.precioCompra * p.cantidadInventario), 0)
+      totalValue: products.reduce((acc, p) => acc + (p.precioCompra * p.cantidadInventario), 0),
+      totalGanancia: products.reduce((acc, p) => acc + (p.precioVenta * p.cantidadInventario) - (p.precioCompra * p.cantidadInventario), 0)
     };
   }, [products]);
 
@@ -36,6 +37,11 @@ const InventoryStats = () => {
       <Card className="p-4">
         <h3 className="text-sm font-medium text-gray-500">Valor Total</h3>
         <p className="text-2xl font-bold">${stats.totalValue.toFixed(2)}</p>
+      </Card>
+
+      <Card className="p-4">
+        <h3 className="text-sm font-medium text-gray-500">Ganancia Total</h3>
+        <p className="text-2xl font-bold text-green-600">${stats.totalGanancia.toFixed(2)}</p>
       </Card>
     </div>
   );
